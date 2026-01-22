@@ -3392,13 +3392,15 @@ def main():
     elif menu_option == "8. Parcelamentos":
         st.subheader("8. Parcelamentos Tributários")
 
-        # Verifica se há parcelamento selecionado/editando ANTES do selectbox
-        if st.session_state.get('parcelamento_selecionado'):
-            parcelamento_id = st.session_state['parcelamento_selecionado']
-            exibir_detalhes_parcelamento(parcelamento_id)
-        elif st.session_state.get('parcelamento_editar'):
-            parcelamento_id = st.session_state['parcelamento_editar']
-            exibir_formulario_edicao_parcelamento(parcelamento_id)
+        # Usa query_params para navegação (mais confiável que session_state)
+        params = st.query_params
+        acao_parcelamento = params.get("parc_acao", None)
+        parcelamento_id_param = params.get("parc_id", None)
+
+        if acao_parcelamento == "ver" and parcelamento_id_param:
+            exibir_detalhes_parcelamento(int(parcelamento_id_param))
+        elif acao_parcelamento == "editar" and parcelamento_id_param:
+            exibir_formulario_edicao_parcelamento(int(parcelamento_id_param))
         else:
             # Só mostra o submenu se não houver parcelamento selecionado/editando
             sub_menu_8 = st.selectbox("Selecione a Ação:", [
@@ -4030,16 +4032,22 @@ def exibir_detalhes_parcelamento(parcelamento_id: int):
 
     # Botão para voltar
     if st.button("⬅️ Voltar para Lista"):
-        del st.session_state['parcelamento_selecionado']
+        # Limpa query params
+        if "parc_acao" in st.query_params:
+            del st.query_params["parc_acao"]
+        if "parc_id" in st.query_params:
+            del st.query_params["parc_id"]
         st.rerun()
 
     # Carrega dados do parcelamento
     parcelamento = carregar_parcelamento_por_id(parcelamento_id)
     if not parcelamento:
         st.warning("Parcelamento não encontrado. Pode ter sido excluído.")
-        # Limpa o session_state para voltar à lista
-        if 'parcelamento_selecionado' in st.session_state:
-            del st.session_state['parcelamento_selecionado']
+        # Limpa query params
+        if "parc_acao" in st.query_params:
+            del st.query_params["parc_acao"]
+        if "parc_id" in st.query_params:
+            del st.query_params["parc_id"]
         st.rerun()
         return
 
@@ -4187,16 +4195,22 @@ def exibir_formulario_edicao_parcelamento(parcelamento_id: int):
 
     # Botão para voltar
     if st.button("⬅️ Voltar para Lista"):
-        del st.session_state['parcelamento_editar']
+        # Limpa query params
+        if "parc_acao" in st.query_params:
+            del st.query_params["parc_acao"]
+        if "parc_id" in st.query_params:
+            del st.query_params["parc_id"]
         st.rerun()
 
     # Carrega dados do parcelamento
     parcelamento = carregar_parcelamento_por_id(parcelamento_id)
     if not parcelamento:
         st.warning("Parcelamento não encontrado. Pode ter sido excluído.")
-        # Limpa o session_state para voltar à lista
-        if 'parcelamento_editar' in st.session_state:
-            del st.session_state['parcelamento_editar']
+        # Limpa query params
+        if "parc_acao" in st.query_params:
+            del st.query_params["parc_acao"]
+        if "parc_id" in st.query_params:
+            del st.query_params["parc_id"]
         st.rerun()
         return
 
@@ -4333,7 +4347,11 @@ def exibir_formulario_edicao_parcelamento(parcelamento_id: int):
 
             if atualizar_parcelamento(parcelamento_id, dados_atualizacao):
                 st.success("Parcelamento atualizado com sucesso!")
-                del st.session_state['parcelamento_editar']
+                # Limpa query params
+                if "parc_acao" in st.query_params:
+                    del st.query_params["parc_acao"]
+                if "parc_id" in st.query_params:
+                    del st.query_params["parc_id"]
                 st.rerun()
             else:
                 st.error("Erro ao atualizar parcelamento!")
@@ -4388,11 +4406,13 @@ def submenu_parcelamentos_cadastro():
         parcelamento_id = int(parcelamento_escolhido.split(" | ")[0])
 
         if btn_ver:
-            st.session_state['parcelamento_selecionado'] = parcelamento_id
+            st.query_params["parc_acao"] = "ver"
+            st.query_params["parc_id"] = str(parcelamento_id)
             st.rerun()
 
         if btn_editar:
-            st.session_state['parcelamento_editar'] = parcelamento_id
+            st.query_params["parc_acao"] = "editar"
+            st.query_params["parc_id"] = str(parcelamento_id)
             st.rerun()
 
         if btn_excluir:
