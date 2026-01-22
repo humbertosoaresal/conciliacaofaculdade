@@ -18,6 +18,12 @@ DB_FILE = 'conciliacao_db.sqlite'
 # Placeholder para queries parametrizadas (? para SQLite, %s para PostgreSQL)
 PH = get_placeholder()
 
+# Tipo de auto-incremento (AUTOINCREMENT para SQLite, SERIAL para PostgreSQL)
+if IS_PRODUCTION:
+    AUTO_INCREMENT = "SERIAL PRIMARY KEY"
+else:
+    AUTO_INCREMENT = "INTEGER PRIMARY KEY AUTOINCREMENT"
+
 # Nomes das tabelas
 CADASTRO_CONTAS_TABLE = 'cadastro_contas'
 EXTRATO_BANCARIO_TABLE = 'extrato_bancario_historico'
@@ -118,7 +124,7 @@ def init_db():
         ''')
         c.execute(f'''
             CREATE TABLE IF NOT EXISTS {LANCAMENTOS_CONTABEIS_TABLE} (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id {AUTO_INCREMENT},
                 idlancamento TEXT,
                 data_lancamento DATE,
                 historico TEXT,
@@ -181,7 +187,7 @@ def init_db():
         # Criar tabela de sócios
         c.execute(f'''
             CREATE TABLE IF NOT EXISTS {SOCIOS_TABLE} (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id {AUTO_INCREMENT},
                 empresa_id INTEGER DEFAULT 1,
                 cpf TEXT UNIQUE NOT NULL,
                 nome_completo TEXT NOT NULL,
@@ -204,7 +210,7 @@ def init_db():
         # Criar tabela de logotipos
         c.execute(f'''
             CREATE TABLE IF NOT EXISTS {LOGOTIPOS_TABLE} (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id {AUTO_INCREMENT},
                 empresa_id INTEGER DEFAULT 1,
                 nome_arquivo TEXT NOT NULL,
                 descricao TEXT,
@@ -222,7 +228,7 @@ def init_db():
         # Tabela principal de parcelamentos
         c.execute(f'''
             CREATE TABLE IF NOT EXISTS {PARCELAMENTOS_TABLE} (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id {AUTO_INCREMENT},
                 numero_parcelamento TEXT UNIQUE,
                 cnpj TEXT,
                 orgao TEXT,
@@ -272,7 +278,7 @@ def init_db():
         # Tabela de débitos do parcelamento
         c.execute(f'''
             CREATE TABLE IF NOT EXISTS {PARCELAMENTO_DEBITOS_TABLE} (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id {AUTO_INCREMENT},
                 parcelamento_id INTEGER,
                 codigo_receita TEXT,
                 descricao_receita TEXT,
@@ -297,7 +303,7 @@ def init_db():
         # Tabela de parcelas
         c.execute(f'''
             CREATE TABLE IF NOT EXISTS {PARCELAMENTO_PARCELAS_TABLE} (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id {AUTO_INCREMENT},
                 parcelamento_id INTEGER,
                 numero_parcela INTEGER,
                 data_vencimento TEXT,
@@ -326,7 +332,7 @@ def init_db():
         # Tabela de pagamentos (histórico)
         c.execute(f'''
             CREATE TABLE IF NOT EXISTS {PARCELAMENTO_PAGAMENTOS_TABLE} (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id {AUTO_INCREMENT},
                 parcelamento_id INTEGER,
                 data_pagamento TEXT,
                 valor_pago REAL,
