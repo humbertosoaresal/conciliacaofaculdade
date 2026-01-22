@@ -121,6 +121,10 @@ class AdaptedConnection:
             cursor.execute(adapted)
         return cursor
 
+    def get_raw_connection(self):
+        """Retorna a conexao real (para uso com pandas.read_sql_query)."""
+        return self._conn
+
     def __getattr__(self, name):
         return getattr(self._conn, name)
 

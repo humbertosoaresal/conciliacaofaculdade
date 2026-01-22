@@ -39,18 +39,34 @@ PARCELAMENTO_DEBITOS_TABLE = 'parcelamento_debitos'
 PARCELAMENTO_PARCELAS_TABLE = 'parcelamento_parcelas'
 PARCELAMENTO_PAGAMENTOS_TABLE = 'parcelamento_pagamentos'
 
-# Mapeamento centralizado de colunas
+# Mapeamento centralizado de colunas (inclui versoes minusculas para PostgreSQL)
 CADASTRO_COLS_DB_TO_DF = {
     'Conta_Contabil': 'Conta Contábil',
     'Saldo_Inicial': 'Saldo Inicial',
     'Data_Inicial_Saldo': 'Data Inicial Saldo',
-    'Conta_Contabil_Negativo': 'Conta Contábil (-)'
+    'Conta_Contabil_Negativo': 'Conta Contábil (-)',
+    # Versoes minusculas (PostgreSQL)
+    'conta_contabil': 'Conta Contábil',
+    'saldo_inicial': 'Saldo Inicial',
+    'data_inicial_saldo': 'Data Inicial Saldo',
+    'conta_contabil_negativo': 'Conta Contábil (-)',
+    # Outras colunas que precisam de normalizacao
+    'agencia': 'Agencia',
+    'conta': 'Conta',
+    'conta_ofx_normalizada': 'Conta_OFX_Normalizada',
+    'codigo_banco': 'Codigo_Banco',
+    'path_logo': 'Path_Logo',
 }
-CADASTRO_COLS_DF_TO_DB = {v: k for k, v in CADASTRO_COLS_DB_TO_DF.items()}
+CADASTRO_COLS_DF_TO_DB = {v: k for k, v in CADASTRO_COLS_DB_TO_DF.items() if not k.islower()}
 
 
 # Nota: get_db_connection agora é importado do módulo database.py
 # Suporta automaticamente SQLite (local) e PostgreSQL (produção)
+
+
+def _get_raw_conn(conn):
+    """Retorna a conexao real para uso com pandas."""
+    return conn.get_raw_connection() if hasattr(conn, 'get_raw_connection') else conn
 
 
 # ==============================================================================
@@ -402,12 +418,15 @@ def carregar_cadastro_contas() -> pd.DataFrame:
     """Carrega o cadastro de contas do BD, incluindo as novas colunas de banco e logo."""
     try:
         with get_db_connection() as conn:
-            query = f"SELECT * FROM {CADASTRO_CONTAS_TABLE} GROUP BY Codigo_Banco, Conta_OFX_Normalizada ORDER BY Agencia, Conta"
-            df = pd.read_sql_query(query, conn, dtype={'Data_Inicial_Saldo': str, 'Codigo_Banco': str})
+            # Query simples sem GROUP BY (PostgreSQL nao suporta GROUP BY parcial)
+            query = f"SELECT DISTINCT * FROM {CADASTRO_CONTAS_TABLE} ORDER BY agencia, conta"
+            df = pd.read_sql_query(query, _get_raw_conn(conn), dtype={'data_inicial_saldo': str, 'codigo_banco': str})
+            # Normaliza nomes das colunas (PostgreSQL retorna minusculas)
             df.rename(columns=CADASTRO_COLS_DB_TO_DF, inplace=True)
-    except Exception:
+    except Exception as e:
+        print(f"DEBUG carregar_cadastro_contas erro: {e}")
         init_db()
-        st.warning("DB atualizado ou criado. Recarregue a aplicação.")
+        st.warning("DB atualizado ou criado. Recarregue a aplicacao.")
         return pd.DataFrame()
 
     if 'Data Inicial Saldo' in df.columns:
@@ -550,7 +569,7 @@ def carregar_plano_contas() -> pd.DataFrame:
     """Carrega o plano de contas do banco de dados."""
     try:
         with get_db_connection() as conn:
-            df = pd.read_sql_query(f"SELECT * FROM {PLANO_CONTAS_TABLE} ORDER BY classificacao", conn)
+            df = pd.read_sql_query(f"SELECT * FROM {PLANO_CONTAS_TABLE} ORDER BY classificacao", _get_raw_conn(conn))
             return df
     except Exception:
         return pd.DataFrame()
@@ -709,7 +728,7 @@ def carregar_lancamentos_contabeis() -> pd.DataFrame:
     """Carrega todos os lançamentos contábeis do banco de dados."""
     try:
         with get_db_connection() as conn:
-            df = pd.read_sql_query(f"SELECT * FROM {LANCAMENTOS_CONTABEIS_TABLE} ORDER BY data_lancamento DESC, id DESC", conn)
+            df = pd.read_sql_query(f"SELECT * FROM {LANCAMENTOS_CONTABEIS_TABLE} ORDER BY data_lancamento DESC, id DESC", _get_raw_conn(conn))
             print(f"DEBUG: carregar_lancamentos_contabeis - DataFrame carregado:\n{df.head()}") # Depuração
             return df
     except Exception as e:
@@ -832,7 +851,7 @@ def carregar_extrato_bancario_historico(conta_ofx_normalizada: str, data_inicio:
             ORDER BY Data_Lancamento ASC, ID_Transacao ASC;
         """
         params = (conta_ofx_normalizada, data_inicio_str, data_fim_str)
-        df = pd.read_sql_query(query, conn, params=params)
+        df = pd.read_sql_query(query, _get_raw_conn(conn), params=params)
 
         if not df.empty and 'Data Lançamento' in df.columns:
             df['Data Lançamento'] = pd.to_datetime(df['Data Lançamento'], errors='coerce').dt.date
@@ -861,7 +880,7 @@ def carregar_empresa() -> dict:
     """Carrega os dados da empresa do banco de dados."""
     try:
         with get_db_connection() as conn:
-            df = pd.read_sql_query(f"SELECT * FROM {EMPRESA_TABLE} WHERE id = 1", conn)
+            df = pd.read_sql_query(f"SELECT * FROM {EMPRESA_TABLE} WHERE id = 1", _get_raw_conn(conn))
             if df.empty:
                 return {}
             return df.iloc[0].to_dict()
@@ -927,7 +946,7 @@ def carregar_socios() -> pd.DataFrame:
         with get_db_connection() as conn:
             df = pd.read_sql_query(
                 f"SELECT * FROM {SOCIOS_TABLE} WHERE empresa_id = 1 ORDER BY nome_completo",
-                conn
+                _get_raw_conn(conn)
             )
             return df
     except Exception:
@@ -1011,7 +1030,7 @@ def carregar_logotipos() -> pd.DataFrame:
         with get_db_connection() as conn:
             df = pd.read_sql_query(
                 f"SELECT * FROM {LOGOTIPOS_TABLE} WHERE empresa_id = 1 ORDER BY logo_principal DESC, data_upload DESC",
-                conn
+                _get_raw_conn(conn)
             )
             return df
     except Exception:
@@ -1110,7 +1129,7 @@ def carregar_parcelamentos() -> pd.DataFrame:
         with get_db_connection() as conn:
             df = pd.read_sql_query(
                 f"SELECT * FROM {PARCELAMENTOS_TABLE} ORDER BY numero_parcelamento",
-                conn
+                _get_raw_conn(conn)
             )
             return df
     except Exception:
@@ -1197,7 +1216,7 @@ def carregar_parcelamento_por_id(parcelamento_id: int) -> dict:
         with get_db_connection() as conn:
             df = pd.read_sql_query(
                 f"SELECT * FROM {PARCELAMENTOS_TABLE} WHERE id = ?",
-                conn, params=(parcelamento_id,)
+                _get_raw_conn(conn), params=(parcelamento_id,)
             )
             if df.empty:
                 return {}
@@ -1216,7 +1235,7 @@ def carregar_debitos_parcelamento(parcelamento_id: int) -> pd.DataFrame:
         with get_db_connection() as conn:
             df = pd.read_sql_query(
                 f"SELECT * FROM {PARCELAMENTO_DEBITOS_TABLE} WHERE parcelamento_id = ? ORDER BY data_vencimento",
-                conn, params=(parcelamento_id,)
+                _get_raw_conn(conn), params=(parcelamento_id,)
             )
             return df
     except Exception:
@@ -1259,7 +1278,7 @@ def carregar_parcelas_parcelamento(parcelamento_id: int) -> pd.DataFrame:
         with get_db_connection() as conn:
             df = pd.read_sql_query(
                 f"SELECT * FROM {PARCELAMENTO_PARCELAS_TABLE} WHERE parcelamento_id = ? ORDER BY numero_parcela",
-                conn, params=(parcelamento_id,)
+                _get_raw_conn(conn), params=(parcelamento_id,)
             )
             return df
     except Exception:
@@ -1321,7 +1340,7 @@ def carregar_pagamentos_parcelamento(parcelamento_id: int) -> pd.DataFrame:
         with get_db_connection() as conn:
             df = pd.read_sql_query(
                 f"SELECT * FROM {PARCELAMENTO_PAGAMENTOS_TABLE} WHERE parcelamento_id = ? ORDER BY data_pagamento DESC",
-                conn, params=(parcelamento_id,)
+                _get_raw_conn(conn), params=(parcelamento_id,)
             )
             return df
     except Exception:
