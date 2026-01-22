@@ -3392,18 +3392,12 @@ def main():
     elif menu_option == "8. Parcelamentos":
         st.subheader("8. Parcelamentos Tributários")
 
-        # DEBUG - remover depois
-        st.caption(f"DEBUG: parcelamento_selecionado={st.session_state.get('parcelamento_selecionado')}, parcelamento_editar={st.session_state.get('parcelamento_editar')}")
-
         # Verifica se há parcelamento selecionado/editando ANTES do selectbox
-        # para exibir diretamente sem renderizar o resto
         if st.session_state.get('parcelamento_selecionado'):
             parcelamento_id = st.session_state['parcelamento_selecionado']
-            st.success(f"DEBUG: Exibindo detalhes do parcelamento {parcelamento_id}")
             exibir_detalhes_parcelamento(parcelamento_id)
         elif st.session_state.get('parcelamento_editar'):
             parcelamento_id = st.session_state['parcelamento_editar']
-            st.success(f"DEBUG: Editando parcelamento {parcelamento_id}")
             exibir_formulario_edicao_parcelamento(parcelamento_id)
         else:
             # Só mostra o submenu se não houver parcelamento selecionado/editando
@@ -4456,20 +4450,29 @@ def submenu_parcelamentos_cadastro():
                     progresso = pagas / total
                     st.progress(progresso, text=f"Progresso: {pagas}/{total} parcelas pagas ({progresso*100:.1f}%)")
 
+                    # Funções callback para os botões
+                    def selecionar_parcelamento(pid):
+                        st.session_state['parcelamento_selecionado'] = pid
+
+                    def editar_parcelamento(pid):
+                        st.session_state['parcelamento_editar'] = pid
+
                     # Botões de ação
                     col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
                     with col_btn1:
-                        btn_ver = st.button("🔍 Ver Detalhes", key=f"ver_{row['id']}")
-                        if btn_ver:
-                            st.session_state['parcelamento_selecionado'] = row['id']
-                            st.warning(f"DEBUG: Botão clicado, definindo parcelamento_selecionado={row['id']}")
-                            st.rerun()
+                        st.button(
+                            "🔍 Ver Detalhes",
+                            key=f"ver_{row['id']}",
+                            on_click=selecionar_parcelamento,
+                            args=(row['id'],)
+                        )
                     with col_btn2:
-                        btn_edit = st.button("✏️ Editar", key=f"edit_{row['id']}")
-                        if btn_edit:
-                            st.session_state['parcelamento_editar'] = row['id']
-                            st.warning(f"DEBUG: Botão clicado, definindo parcelamento_editar={row['id']}")
-                            st.rerun()
+                        st.button(
+                            "✏️ Editar",
+                            key=f"edit_{row['id']}",
+                            on_click=editar_parcelamento,
+                            args=(row['id'],)
+                        )
                     with col_btn3:
                         # Botão para rescindir/encerrar
                         if row.get('situacao') == 'Ativo':
