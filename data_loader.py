@@ -842,41 +842,228 @@ def ler_plano_contas_csv(uploaded_file, data_cadastro_str, delimiter=';'):
 def ler_plano_contas_totvs(uploaded_file, data_cadastro_str):
     """
     Le o arquivo Excel do plano de contas TOTVS.
-    Formato esperado: colunas Codigo, Classificacao, Descricao, Tipo
+    O arquivo pode ter cabecalho de relatorio nas primeiras linhas.
     """
     try:
         uploaded_file.seek(0)
-        # Tenta ler o Excel (xls ou xlsx)
+
+        # Tenta ler o Excel sem cabecalho primeiro para encontrar a linha correta
+        df_raw = None
+        excel_error = None
+
         try:
-            df = pd.read_excel(uploaded_file, engine='xlrd')  # Para .xls
-        except Exception:
+            df_raw = pd.read_excel(uploaded_file, engine='xlrd', header=None)
+        except Exception as e1:
+            excel_error = str(e1)
+            try:
+                uploaded_file.seek(0)
+                df_raw = pd.read_excel(uploaded_file, engine='openpyxl', header=None)
+                excel_error = None
+            except Exception as e2:
+                excel_error = f"xlrd: {str(e1)[:50]} / openpyxl: {str(e2)[:50]}"
+
+        # Se falhou leitura como Excel, tenta como CSV/texto
+        if df_raw is None:
+            st.warning(f"Nao foi possivel ler como Excel. Tentando como texto...")
             uploaded_file.seek(0)
-            df = pd.read_excel(uploaded_file, engine='openpyxl')  # Para .xlsx
+            content = uploaded_file.read()
+            if isinstance(content, bytes):
+                content = content.decode('latin-1', errors='ignore')
 
-        st.info(f"Arquivo lido com {len(df)} linhas e colunas: {list(df.columns)}")
+            # Detecta o separador
+            lines = content.strip().split('\n')
+            sep = '\t'  # Default tab
+            for line in lines[:20]:
+                if '\t' in line:
+                    sep = '\t'
+                    break
+                elif ';' in line:
+                    sep = ';'
+                    break
+                elif ',' in line:
+                    sep = ','
+                    break
 
-        # Tenta identificar as colunas automaticamente
-        df.columns = [str(c).strip().lower() for c in df.columns]
+            df_raw = pd.read_csv(StringIO(content), sep=sep, header=None, on_bad_lines='skip')
+
+        st.info(f"Arquivo bruto: {len(df_raw)} linhas x {len(df_raw.columns)} colunas")
+
+        # Se arquivo tem apenas 1 coluna, pode ser formato de relatorio TOTVS (posicoes fixas)
+        if len(df_raw.columns) == 1:
+            st.warning("Arquivo com 1 coluna detectado. Tentando parse de formato TOTVS...")
+
+            # Procura linha de cabecalho (REDUZIDO, COD.CONTA, etc)
+            header_idx = None
+            for idx, row in df_raw.iterrows():
+                val = str(row.iloc[0]).upper() if pd.notna(row.iloc[0]) else ''
+                if 'REDUZIDO' in val and ('COD.CONTA' in val or 'CONTA' in val):
+                    header_idx = idx
+                    break
+
+            if header_idx is not None:
+                st.info(f"Cabecalho TOTVS encontrado na linha {header_idx + 1}")
+
+                # Extrai dados das linhas apos o cabecalho
+                dados = []
+                for idx in range(header_idx + 2, len(df_raw)):  # Pula linha de ===
+                    linha = str(df_raw.iloc[idx, 0]) if pd.notna(df_raw.iloc[idx, 0]) else ''
+                    linha = linha.strip()
+
+                    if not linha or linha.startswith('=') or len(linha) < 10:
+                        continue
+
+                    # Parse por posicoes fixas do formato TOTVS
+                    # REDUZIDO(0-11) A/S(11-15) COD.CONTA(15-55) DESCRICAO(55-100) NAT(100-105) RATEIO(105-111) GRAU(111+)
+                    try:
+                        reduzido = linha[0:11].strip()
+                        # Verifica se reduzido e numerico
+                        if not reduzido or not reduzido.split()[0].isdigit():
+                            continue
+
+                        reduzido = reduzido.split()[0]  # Pega apenas o numero
+                        tipo_conta = linha[11:15].strip()  # A ou S
+                        cod_conta = linha[15:55].strip()
+                        descricao = linha[55:95].strip() if len(linha) > 55 else ''
+                        natureza = linha[95:110].strip().split()[0] if len(linha) > 95 else ''
+                        grau = linha[115:].strip().split()[0] if len(linha) > 115 else ''
+
+                        if reduzido and cod_conta:
+                            dados.append({
+                                'codigo': reduzido,
+                                'classificacao': cod_conta,
+                                'descricao': descricao,
+                                'tipo': tipo_conta,
+                                'natureza_orig': natureza,
+                                'grau': grau.split()[0] if grau else ''
+                            })
+                    except Exception:
+                        continue
+
+                if dados:
+                    df_raw = pd.DataFrame(dados)
+                    st.success(f"Extraidas {len(df_raw)} contas do formato TOTVS")
+                    # Ja temos as colunas corretas, pula para o processamento final
+                    df = df_raw.copy()
+                    df.columns = [str(c).strip().lower() for c in df.columns]
+                    # Vai direto para mapeamento de colunas
+                    st.info(f"Colunas detectadas: {list(df.columns)}")
+                    col_map = {
+                        'codigo': ['codigo', 'cod', 'reduzido'],
+                        'classificacao': ['classificacao', 'classif', 'class'],
+                        'descricao': ['descricao', 'desc', 'nome'],
+                        'tipo': ['tipo', 'type']
+                    }
+                    df_final = pd.DataFrame()
+                    for target_col, possible_names in col_map.items():
+                        found = False
+                        for name in possible_names:
+                            matching_cols = [c for c in df.columns if name in c.lower()]
+                            if matching_cols:
+                                df_final[target_col] = df[matching_cols[0]].astype(str).str.strip()
+                                found = True
+                                break
+                        if not found:
+                            df_final[target_col] = ''
+
+                    # Usa a natureza original se disponivel
+                    if 'natureza_orig' in df.columns:
+                        df_final['natureza'] = df['natureza_orig'].apply(
+                            lambda x: 'Devedora' if str(x).upper() == 'DB' else ('Credora' if str(x).upper() == 'CR' else 'Outra')
+                        )
+                    else:
+                        df_final['natureza'] = df_final['classificacao'].apply(
+                            lambda x: 'Devedora' if str(x).startswith(('1', '2', '3')) else 'Credora'
+                        )
+
+                    if 'grau' in df.columns:
+                        df_final['grau'] = df['grau'].astype(str)
+                    else:
+                        df_final['grau'] = df_final['classificacao'].apply(
+                            lambda x: str(len(str(x).replace('.', ' ').split()))
+                        )
+
+                    df_final['data_cadastro'] = data_cadastro_str
+                    df_final['encerrada'] = False
+                    df_final['data_encerramento'] = None
+
+                    # Remove linhas invalidas
+                    df_final = df_final[df_final['codigo'].str.len() > 0]
+                    df_final = df_final[df_final['codigo'].str.match(r'^\d+$', na=False)]
+
+                    final_cols = ['codigo', 'classificacao', 'descricao', 'tipo', 'natureza', 'grau', 'data_cadastro', 'encerrada', 'data_encerramento']
+                    df_final = df_final[final_cols].copy()
+
+                    if df_final.empty:
+                        st.warning("Nenhuma conta valida apos processamento")
+                    else:
+                        st.success(f"{len(df_final)} contas encontradas")
+                        st.dataframe(df_final.head(10))
+
+                    return df_final
+
+                else:
+                    st.error("Nao foi possivel extrair dados do formato TOTVS")
+
+        # Procura a linha que contem os cabecalhos (Codigo, Reduzido, Classificacao, etc.)
+        header_row = None
+        keywords = ['codigo', 'reduzido', 'classificacao', 'descricao', 'mascara']
+
+        for idx, row in df_raw.iterrows():
+            row_text = ' '.join([str(v).lower() for v in row.values if pd.notna(v)])
+            matches = sum(1 for kw in keywords if kw in row_text)
+            if matches >= 2:  # Encontrou pelo menos 2 palavras-chave
+                header_row = idx
+                st.info(f"Cabecalho encontrado na linha {idx + 1}")
+                break
+
+        if header_row is None:
+            # Tenta usar a primeira linha com dados numericos na primeira coluna
+            for idx, row in df_raw.iterrows():
+                first_val = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ''
+                if first_val.isdigit() and len(first_val) <= 6:
+                    header_row = idx - 1 if idx > 0 else 0
+                    break
+
+        if header_row is None:
+            header_row = 0
+
+        # Usa o df_raw ja carregado, apenas ajustando o cabecalho
+        # header_row = indice onde estao os nomes das colunas
+        # Os dados comecam na linha header_row + 1
+        new_columns = df_raw.iloc[header_row].values
+        df = df_raw.iloc[header_row + 1:].copy()
+        df.columns = new_columns
+        df = df.reset_index(drop=True)
+
+        # Limpa nomes das colunas
+        df.columns = [str(c).strip().lower().replace('í', 'i').replace('ã', 'a').replace('ç', 'c').replace('é', 'e').replace('ê', 'e') for c in df.columns]
+
+        st.info(f"Colunas detectadas: {list(df.columns)}")
 
         # Mapeamento de possiveis nomes de colunas
         col_map = {
-            'codigo': ['codigo', 'cod', 'code', 'reduzido', 'conta'],
-            'classificacao': ['classificacao', 'classif', 'class', 'mascara'],
-            'descricao': ['descricao', 'desc', 'nome', 'description', 'titulo'],
-            'tipo': ['tipo', 'type', 'natureza', 'classe']
+            'codigo': ['codigo', 'cod', 'code', 'reduzido', 'conta', 'cod.'],
+            'classificacao': ['classificacao', 'classif', 'class', 'mascara', 'class.'],
+            'descricao': ['descricao', 'desc', 'nome', 'description', 'titulo', 'descr.'],
+            'tipo': ['tipo', 'type', 'natureza', 'classe', 'tp']
         }
 
         df_final = pd.DataFrame()
         for target_col, possible_names in col_map.items():
+            found = False
             for name in possible_names:
-                if name in df.columns:
-                    df_final[target_col] = df[name].astype(str).str.strip()
+                matching_cols = [c for c in df.columns if name in c.lower()]
+                if matching_cols:
+                    df_final[target_col] = df[matching_cols[0]].astype(str).str.strip()
+                    found = True
                     break
-            if target_col not in df_final.columns:
+            if not found:
                 df_final[target_col] = ''
 
-        # Remove linhas vazias
+        # Remove linhas vazias ou com valores invalidos
         df_final = df_final[df_final['codigo'].str.len() > 0]
+        df_final = df_final[~df_final['codigo'].str.contains('nan', case=False, na=False)]
+        df_final = df_final[df_final['codigo'].str.match(r'^\d+$', na=False)]
 
         # Define natureza baseada na classificacao
         def get_natureza(classif):
@@ -909,13 +1096,19 @@ def ler_plano_contas_totvs(uploaded_file, data_cadastro_str):
         final_cols = ['codigo', 'classificacao', 'descricao', 'tipo', 'natureza', 'grau', 'data_cadastro', 'encerrada', 'data_encerramento']
         df_final = df_final[final_cols].copy()
 
-        st.success(f"{len(df_final)} contas encontradas no arquivo TOTVS")
-        st.dataframe(df_final.head(10))
+        if df_final.empty:
+            st.warning("Nenhuma conta valida encontrada. Verifique o formato do arquivo.")
+            st.dataframe(df.head(20))
+        else:
+            st.success(f"{len(df_final)} contas encontradas no arquivo TOTVS")
+            st.dataframe(df_final.head(10))
 
         return df_final
 
     except Exception as e:
         st.error(f"Erro ao processar arquivo TOTVS: {e}")
+        import traceback
+        st.code(traceback.format_exc())
         return pd.DataFrame()
 
 
