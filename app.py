@@ -3391,13 +3391,26 @@ def main():
 
     elif menu_option == "8. Parcelamentos":
         st.subheader("8. Parcelamentos Tributários")
+
+        # Determina o índice padrão baseado no estado atual
+        sub_menu_8_default = 0
+        if st.session_state.get('parcelamento_selecionado') or st.session_state.get('parcelamento_editar'):
+            sub_menu_8_default = 0  # Mantém em 8.1 se houver parcelamento selecionado/editando
+
         sub_menu_8 = st.selectbox("Selecione a Ação:", [
             "8.1 Cadastro de Parcelamentos",
             "8.2 Importar PDF e-CAC",
             "8.3 Controle de Parcelas",
             "8.4 Conciliação com Extrato",
             "8.5 Lançamentos Contábeis"
-        ])
+        ], index=sub_menu_8_default, key="sub_menu_8_selectbox")
+
+        # Limpa estados de parcelamento se mudar de submenu (exceto 8.1)
+        if sub_menu_8 != "8.1 Cadastro de Parcelamentos":
+            if 'parcelamento_selecionado' in st.session_state:
+                del st.session_state['parcelamento_selecionado']
+            if 'parcelamento_editar' in st.session_state:
+                del st.session_state['parcelamento_editar']
 
         if sub_menu_8 == "8.1 Cadastro de Parcelamentos":
             submenu_parcelamentos_cadastro()
