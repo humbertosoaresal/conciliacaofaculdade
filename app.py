@@ -4400,9 +4400,14 @@ def submenu_parcelamentos_cadastro():
             key="select_ver_detalhes"
         )
 
-        if parc_selecionado_ver != "-- Selecione um parcelamento --":
+        # DEBUG
+        st.caption(f"Selecionado: {parc_selecionado_ver}")
+
+        if parc_selecionado_ver and parc_selecionado_ver != "-- Selecione um parcelamento --":
             parc_id = int(parc_selecionado_ver.split(" | ")[0])
+            st.caption(f"ID extraído: {parc_id}")
             parcelamento = carregar_parcelamento_por_id(parc_id)
+            st.caption(f"Parcelamento carregado: {parcelamento is not None}")
 
             if parcelamento:
                 st.markdown("---")
@@ -4428,6 +4433,8 @@ def submenu_parcelamentos_cadastro():
                     st.write(f"**Juros:** {formatar_moeda(parcelamento.get('valor_juros', 0))}")
                     st.write(f"**Total Consolidado:** {formatar_moeda(parcelamento.get('valor_total_consolidado', 0))}")
                     st.write(f"**Saldo Devedor:** {formatar_moeda(parcelamento.get('saldo_devedor', 0))}")
+            else:
+                st.error("Parcelamento não encontrado no banco de dados!")
         else:
             st.info("Selecione um parcelamento acima para ver os detalhes.")
 
@@ -4439,9 +4446,14 @@ def submenu_parcelamentos_cadastro():
             key="select_editar"
         )
 
-        if parc_selecionado_edit != "-- Selecione um parcelamento --":
+        # DEBUG
+        st.caption(f"Selecionado para editar: {parc_selecionado_edit}")
+
+        if parc_selecionado_edit and parc_selecionado_edit != "-- Selecione um parcelamento --":
             parc_id = int(parc_selecionado_edit.split(" | ")[0])
+            st.caption(f"ID extraído: {parc_id}")
             parcelamento = carregar_parcelamento_por_id(parc_id)
+            st.caption(f"Parcelamento carregado: {parcelamento is not None}")
 
             if parcelamento:
                 st.markdown("---")
