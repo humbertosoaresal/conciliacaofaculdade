@@ -49,7 +49,10 @@
       "Bash(git commit:*)",
       "Bash(git branch:*)",
       "Bash(git remote add:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "WebFetch(domain:conciliacaofaculdade.onrender.com)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://conciliacaofaculdade.onrender.com/)",
+      "Bash(curl -s https://conciliacaofaculdade.onrender.com/_stcore/health)"
     ],
     "deny": [],
     "ask": []

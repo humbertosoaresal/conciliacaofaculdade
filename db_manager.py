@@ -449,6 +449,10 @@ def salvar_cadastro_contas(df: pd.DataFrame):
             df_final = df_final[db_cols]
             df_final.drop_duplicates(subset=['Codigo_Banco', 'Conta_OFX_Normalizada'], keep='last', inplace=True)
 
+            # PostgreSQL usa nomes de colunas em minusculas
+            if IS_PRODUCTION:
+                df_final.columns = [col.lower() for col in df_final.columns]
+
             # Anexa o dataframe limpo e processado (usa SQLAlchemy engine)
             df_final.to_sql(CADASTRO_CONTAS_TABLE, engine, if_exists='append', index=False)
             st.success("Cadastro salvo no banco de dados.")
@@ -507,6 +511,10 @@ def salvar_contas_ofx_faltantes(df_ofx: pd.DataFrame, df_cadastro_atual: pd.Data
 
         df_final = contas_novas[['Agencia', 'Conta', 'Conta_OFX_Normalizada', 'Conta_Contabil', 'Conta_Contabil_Negativo', 'Saldo_Inicial', 'Data_Inicial_Saldo', 'Codigo_Banco', 'Path_Logo']]
 
+        # PostgreSQL usa nomes de colunas em minusculas
+        if IS_PRODUCTION:
+            df_final.columns = [col.lower() for col in df_final.columns]
+
         try:
             engine = get_sqlalchemy_engine()
             df_final.to_sql(CADASTRO_CONTAS_TABLE, engine, if_exists='append', index=False)
@@ -550,7 +558,11 @@ def carregar_plano_contas() -> pd.DataFrame:
 def salvar_plano_contas(df: pd.DataFrame):
     """Salva o DataFrame do plano de contas no banco de dados."""
     engine = get_sqlalchemy_engine()
-    df.to_sql(PLANO_CONTAS_TABLE, engine, if_exists='replace', index=False)
+    df_save = df.copy()
+    # PostgreSQL usa nomes de colunas em minusculas
+    if IS_PRODUCTION:
+        df_save.columns = [col.lower() for col in df_save.columns]
+    df_save.to_sql(PLANO_CONTAS_TABLE, engine, if_exists='replace', index=False)
     carregar_plano_contas.clear()
 
 def excluir_conta_plano(codigo: str) -> bool:
