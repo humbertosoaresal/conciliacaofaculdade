@@ -1,0 +1,43 @@
+# Virtual environments
+.venv/
+.venv_py312/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Database
+*.db
+*.sqlite
+conciliacao_db.sqlite
+
+# Arquivos de dados pessoais/testes
+*.ofx
+*.OFX
+extratos/
+*.CSV
+*.csv
+*.xlsx
+*.xls
+parcelamentos/
+
+# Arquivos locais
+.env
+logos/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

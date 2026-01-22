@@ -1,0 +1,53 @@
+============================================
+  SISTEMA DE CONCILIAÇÃO BANCÁRIA
+  Instruções de Instalação e Uso
+============================================
+
+REQUISITOS:
+- Windows 10 ou superior
+- Python 3.10 ou superior (https://www.python.org/downloads/)
+  IMPORTANTE: Durante a instalação do Python, marque "Add Python to PATH"
+
+============================================
+INSTALAÇÃO (apenas na primeira vez):
+============================================
+
+1. Instale o Python (se ainda não tiver):
+   - Acesse: https://www.python.org/downloads/
+   - Baixe e instale a versão mais recente
+   - MARQUE a opção "Add Python to PATH"
+
+2. Execute o arquivo INSTALAR.bat
+   - Clique duas vezes no arquivo
+   - Aguarde a instalação das dependências (pode levar alguns minutos)
+
+============================================
+COMO USAR:
+============================================
+
+1. Execute o arquivo INICIAR.bat
+   - Clique duas vezes no arquivo
+   - O navegador abrirá automaticamente com o sistema
+
+2. Para encerrar:
+   - Feche a janela do terminal (tela preta)
+
+============================================
+PROBLEMAS COMUNS:
+============================================
+
+"Python não encontrado":
+- Instale o Python e marque "Add Python to PATH"
+- Reinicie o computador após instalar
+
+"Erro ao instalar dependências":
+- Verifique sua conexão com a internet
+- Execute o INSTALAR.bat novamente
+
+O navegador não abre:
+- Acesse manualmente: http://localhost:8501
+
+============================================
+SUPORTE:
+============================================
+Em caso de dúvidas, entre em contato com o desenvolvedor.
