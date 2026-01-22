@@ -3140,15 +3140,15 @@ def main():
     st.sidebar.title("Menu Principal")
     menu_option = st.sidebar.selectbox(
         "Selecione a seção:",
-        ["1. Cadastro", "2. Extrato Bancário", "3. Extrato Lançamento", "4. Lançamentos Contábeis", "5. Conciliação", "6. Relatórios", "7. Exportação", "8. Parcelamentos"]
+        ["1. Cadastro", "2. Extrato Bancário", "3. Extrato Lançamento", "4. Lançamentos Contábeis", "5. Conciliação", "6. Relatórios", "7. Exportação", "8. Parcelamentos"],
+        key="menu_principal_selectbox"
     )
 
     # Limpa session_states de parcelamentos quando sair do menu 8
     if menu_option != "8. Parcelamentos":
-        if 'parcelamento_selecionado' in st.session_state:
-            del st.session_state['parcelamento_selecionado']
-        if 'parcelamento_editar' in st.session_state:
-            del st.session_state['parcelamento_editar']
+        for key in ['parcelamento_selecionado', 'parcelamento_editar']:
+            if key in st.session_state:
+                del st.session_state[key]
 
     # Botão de limpar cache no sidebar
     st.sidebar.markdown("---")
