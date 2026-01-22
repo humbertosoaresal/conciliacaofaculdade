@@ -3392,36 +3392,34 @@ def main():
     elif menu_option == "8. Parcelamentos":
         st.subheader("8. Parcelamentos Tributários")
 
-        # Determina o índice padrão baseado no estado atual
-        sub_menu_8_default = 0
-        if st.session_state.get('parcelamento_selecionado') or st.session_state.get('parcelamento_editar'):
-            sub_menu_8_default = 0  # Mantém em 8.1 se houver parcelamento selecionado/editando
+        # Verifica se há parcelamento selecionado/editando ANTES do selectbox
+        # para exibir diretamente sem renderizar o resto
+        if st.session_state.get('parcelamento_selecionado'):
+            parcelamento_id = st.session_state['parcelamento_selecionado']
+            exibir_detalhes_parcelamento(parcelamento_id)
+        elif st.session_state.get('parcelamento_editar'):
+            parcelamento_id = st.session_state['parcelamento_editar']
+            exibir_formulario_edicao_parcelamento(parcelamento_id)
+        else:
+            # Só mostra o submenu se não houver parcelamento selecionado/editando
+            sub_menu_8 = st.selectbox("Selecione a Ação:", [
+                "8.1 Cadastro de Parcelamentos",
+                "8.2 Importar PDF e-CAC",
+                "8.3 Controle de Parcelas",
+                "8.4 Conciliação com Extrato",
+                "8.5 Lançamentos Contábeis"
+            ], key="sub_menu_8_selectbox")
 
-        sub_menu_8 = st.selectbox("Selecione a Ação:", [
-            "8.1 Cadastro de Parcelamentos",
-            "8.2 Importar PDF e-CAC",
-            "8.3 Controle de Parcelas",
-            "8.4 Conciliação com Extrato",
-            "8.5 Lançamentos Contábeis"
-        ], index=sub_menu_8_default, key="sub_menu_8_selectbox")
-
-        # Limpa estados de parcelamento se mudar de submenu (exceto 8.1)
-        if sub_menu_8 != "8.1 Cadastro de Parcelamentos":
-            if 'parcelamento_selecionado' in st.session_state:
-                del st.session_state['parcelamento_selecionado']
-            if 'parcelamento_editar' in st.session_state:
-                del st.session_state['parcelamento_editar']
-
-        if sub_menu_8 == "8.1 Cadastro de Parcelamentos":
-            submenu_parcelamentos_cadastro()
-        elif sub_menu_8 == "8.2 Importar PDF e-CAC":
-            submenu_parcelamentos_importar_pdf()
-        elif sub_menu_8 == "8.3 Controle de Parcelas":
-            submenu_parcelamentos_controle_parcelas()
-        elif sub_menu_8 == "8.4 Conciliação com Extrato":
-            submenu_parcelamentos_conciliacao()
-        elif sub_menu_8 == "8.5 Lançamentos Contábeis":
-            submenu_parcelamentos_lancamentos()
+            if sub_menu_8 == "8.1 Cadastro de Parcelamentos":
+                submenu_parcelamentos_cadastro()
+            elif sub_menu_8 == "8.2 Importar PDF e-CAC":
+                submenu_parcelamentos_importar_pdf()
+            elif sub_menu_8 == "8.3 Controle de Parcelas":
+                submenu_parcelamentos_controle_parcelas()
+            elif sub_menu_8 == "8.4 Conciliação com Extrato":
+                submenu_parcelamentos_conciliacao()
+            elif sub_menu_8 == "8.5 Lançamentos Contábeis":
+                submenu_parcelamentos_lancamentos()
 
 def submenu_exportacao_dominio():
     """Exporta lançamentos contábeis no formato Domínio Sistemas - Layout Lançamentos em Lote."""
