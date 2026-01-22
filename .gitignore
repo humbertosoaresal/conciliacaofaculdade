@@ -27,8 +27,11 @@ conciliacao_db.sqlite
 extratos/
 *.CSV
 *.csv
+!bancosassociados.csv
 *.xlsx
 *.xls
+!planototvs.xls
+!planototvs.XLS
 parcelamentos/
 
 # Arquivos locais

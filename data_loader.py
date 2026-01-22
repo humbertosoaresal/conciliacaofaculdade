@@ -833,12 +833,94 @@ def ler_plano_contas_csv(uploaded_file, data_cadastro_str, delimiter=';'):
         return df_final
 
     except Exception as e:
-        st.error(f"Erro crítico ao processar o arquivo do plano de contas: {e}")
-        st.info("Verifique se o arquivo tem o cabeçalho nas primeiras 4 linhas e os títulos na linha 5.")
+        st.error(f"Erro critico ao processar o arquivo do plano de contas: {e}")
+        st.info("Verifique se o arquivo tem o cabecalho nas primeiras 4 linhas e os titulos na linha 5.")
         return pd.DataFrame()
 
+
+@st.cache_data(show_spinner="Lendo Plano de Contas TOTVS...")
+def ler_plano_contas_totvs(uploaded_file, data_cadastro_str):
+    """
+    Le o arquivo Excel do plano de contas TOTVS.
+    Formato esperado: colunas Codigo, Classificacao, Descricao, Tipo
+    """
+    try:
+        uploaded_file.seek(0)
+        # Tenta ler o Excel (xls ou xlsx)
+        try:
+            df = pd.read_excel(uploaded_file, engine='xlrd')  # Para .xls
+        except Exception:
+            uploaded_file.seek(0)
+            df = pd.read_excel(uploaded_file, engine='openpyxl')  # Para .xlsx
+
+        st.info(f"Arquivo lido com {len(df)} linhas e colunas: {list(df.columns)}")
+
+        # Tenta identificar as colunas automaticamente
+        df.columns = [str(c).strip().lower() for c in df.columns]
+
+        # Mapeamento de possiveis nomes de colunas
+        col_map = {
+            'codigo': ['codigo', 'cod', 'code', 'reduzido', 'conta'],
+            'classificacao': ['classificacao', 'classif', 'class', 'mascara'],
+            'descricao': ['descricao', 'desc', 'nome', 'description', 'titulo'],
+            'tipo': ['tipo', 'type', 'natureza', 'classe']
+        }
+
+        df_final = pd.DataFrame()
+        for target_col, possible_names in col_map.items():
+            for name in possible_names:
+                if name in df.columns:
+                    df_final[target_col] = df[name].astype(str).str.strip()
+                    break
+            if target_col not in df_final.columns:
+                df_final[target_col] = ''
+
+        # Remove linhas vazias
+        df_final = df_final[df_final['codigo'].str.len() > 0]
+
+        # Define natureza baseada na classificacao
+        def get_natureza(classif):
+            if not classif or len(classif) < 1:
+                return 'Outra'
+            primeiro = classif[0] if isinstance(classif, str) else ''
+            if primeiro in ['1', '2', '3']:
+                return 'Devedora'
+            elif primeiro in ['4', '5', '6', '7']:
+                return 'Credora'
+            return 'Outra'
+
+        df_final['natureza'] = df_final['classificacao'].apply(get_natureza)
+
+        # Determina o grau baseado na classificacao
+        def get_grau(classif):
+            if not classif:
+                return '1'
+            partes = str(classif).replace('.', ' ').replace('-', ' ').split()
+            return str(len(partes))
+
+        df_final['grau'] = df_final['classificacao'].apply(get_grau)
+
+        # Adiciona campos adicionais
+        df_final['data_cadastro'] = data_cadastro_str
+        df_final['encerrada'] = False
+        df_final['data_encerramento'] = None
+
+        # Ordena colunas
+        final_cols = ['codigo', 'classificacao', 'descricao', 'tipo', 'natureza', 'grau', 'data_cadastro', 'encerrada', 'data_encerramento']
+        df_final = df_final[final_cols].copy()
+
+        st.success(f"{len(df_final)} contas encontradas no arquivo TOTVS")
+        st.dataframe(df_final.head(10))
+
+        return df_final
+
+    except Exception as e:
+        st.error(f"Erro ao processar arquivo TOTVS: {e}")
+        return pd.DataFrame()
+
+
 # ==============================================================================
-# 6. FUNÇÕES DE CARREGAMENTO DE EXTRATO VIA PDF
+# 6. FUNCOES DE CARREGAMENTO DE EXTRATO VIA PDF
 # ==============================================================================
 
 def _format_valor_brasileiro(valor_str):

@@ -648,16 +648,20 @@ def sidebar_botao_cadastro_empresa():
         st.rerun()
 
 def submenu_plano_contas():
-    st.subheader("1.2 Cadastro de Contas Contábeis")
-    with st.expander("📥 Importar Plano de Contas de Arquivo CSV"):
+    st.subheader("1.2 Cadastro de Contas Contabeis")
+
+    tab_csv, tab_totvs = st.tabs(["Importar CSV", "Importar TOTVS (Excel)"])
+
+    with tab_csv:
+        st.markdown("#### Importar Plano de Contas de Arquivo CSV")
         col1, col2, col3 = st.columns([2, 1, 1])
         with col1:
             uploaded_file_plano = st.file_uploader("Selecione o arquivo `plano de Contas.csv`", type=['csv'], key='upload_plano_contas')
         with col2:
-            data_cadastro_importacao_str = st.text_input("Data de Cadastro (DD/MM/AAAA)", datetime.date.today().strftime('%d/%m/%Y'))
+            data_cadastro_importacao_str = st.text_input("Data de Cadastro (DD/MM/AAAA)", datetime.date.today().strftime('%d/%m/%Y'), key='data_csv')
         with col3:
             delimiter = st.text_input("Delimitador", value=';', max_chars=1)
-        if st.button("Importar Arquivo"):
+        if st.button("Importar CSV", key='btn_importar_csv'):
             if uploaded_file_plano and delimiter and data_cadastro_importacao_str:
                 df_importado = ler_plano_contas_csv(uploaded_file_plano, data_cadastro_importacao_str, delimiter)
                 if not df_importado.empty:
@@ -666,12 +670,40 @@ def submenu_plano_contas():
                     contas_ja_existentes = df_importado[df_importado['codigo'].isin(codigos_existentes)]
                     contas_novas = df_importado[~df_importado['codigo'].isin(codigos_existentes)]
                     if not contas_ja_existentes.empty:
-                        st.warning(f"{len(contas_ja_existentes)} contas do arquivo já existem e foram ignoradas.")
+                        st.warning(f"{len(contas_ja_existentes)} contas do arquivo ja existem e foram ignoradas.")
                     if not contas_novas.empty:
                         df_final = pd.concat([df_existente, contas_novas], ignore_index=True)
                         salvar_plano_contas(df_final)
                         st.success(f"{len(contas_novas)} novas contas importadas e salvas com sucesso!")
                         st.rerun()
+
+    with tab_totvs:
+        st.markdown("#### Importar Plano de Contas do TOTVS (Excel)")
+        st.info("Selecione o arquivo Excel exportado do TOTVS (planototvs.xls ou similar)")
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            uploaded_file_totvs = st.file_uploader("Selecione o arquivo Excel", type=['xls', 'xlsx'], key='upload_plano_totvs')
+        with col2:
+            data_cadastro_totvs = st.text_input("Data de Cadastro (DD/MM/AAAA)", datetime.date.today().strftime('%d/%m/%Y'), key='data_totvs')
+        if st.button("Importar TOTVS", key='btn_importar_totvs'):
+            if uploaded_file_totvs and data_cadastro_totvs:
+                from data_loader import ler_plano_contas_totvs
+                df_importado = ler_plano_contas_totvs(uploaded_file_totvs, data_cadastro_totvs)
+                if not df_importado.empty:
+                    df_existente = carregar_plano_contas()
+                    codigos_existentes = df_existente['codigo'].tolist() if not df_existente.empty else []
+                    contas_ja_existentes = df_importado[df_importado['codigo'].isin(codigos_existentes)]
+                    contas_novas = df_importado[~df_importado['codigo'].isin(codigos_existentes)]
+                    if not contas_ja_existentes.empty:
+                        st.warning(f"{len(contas_ja_existentes)} contas do arquivo ja existem e foram ignoradas.")
+                    if not contas_novas.empty:
+                        df_final = pd.concat([df_existente, contas_novas], ignore_index=True)
+                        salvar_plano_contas(df_final)
+                        st.success(f"{len(contas_novas)} novas contas importadas e salvas com sucesso!")
+                        st.rerun()
+                    elif contas_novas.empty and not contas_ja_existentes.empty:
+                        st.info("Todas as contas do arquivo ja existem no sistema.")
+
     st.markdown("---")
     st.subheader("Plano de Contas Atuais")
     df_editor = carregar_plano_contas().copy()

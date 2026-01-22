@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from database import (
     get_db_connection, IS_PRODUCTION, get_placeholder,
     execute_query, adapt_schema_for_postgres, get_connection,
-    get_sqlalchemy_engine
+    get_sqlalchemy_engine, adapt_query
 )
 
 # O nome do arquivo do banco de dados SQLite (usado apenas localmente)
@@ -834,27 +834,29 @@ def salvar_extrato_bancario_historico(df_ofx: pd.DataFrame):
             st.error(f"Erro ao inserir dados no historico do extrato: {e}")
             conn.rollback()
 
-@st.cache_data(show_spinner="Carregando histórico do banco de dados...")
+@st.cache_data(show_spinner="Carregando historico do banco de dados...")
 def carregar_extrato_bancario_historico(conta_ofx_normalizada: str, data_inicio: datetime.date, data_fim: datetime.date) -> pd.DataFrame:
-    """Carrega o extrato bancário do histórico, filtrando por conta e período."""
+    """Carrega o extrato bancario do historico, filtrando por conta e periodo."""
     with get_db_connection() as conn:
         data_inicio_str = data_inicio.strftime('%Y-%m-%d')
         data_fim_str = data_fim.strftime('%Y-%m-%d')
         query = f"""
-            SELECT 
-                ID_Transacao AS \"ID Transacao\",
-                Data_Lancamento AS \"Data Lançamento\",
-                Valor, Descricao AS \"Descrição\",
-                Tipo, Banco_OFX, Conta_OFX_Normalizada
+            SELECT
+                id_transacao AS "ID Transacao",
+                data_lancamento AS "Data Lancamento",
+                valor, descricao AS "Descricao",
+                tipo, banco_ofx, conta_ofx_normalizada
             FROM {EXTRATO_BANCARIO_TABLE}
-            WHERE Conta_OFX_Normalizada = ? AND Data_Lancamento BETWEEN ? AND ?
-            ORDER BY Data_Lancamento ASC, ID_Transacao ASC;
+            WHERE conta_ofx_normalizada = ? AND data_lancamento BETWEEN ? AND ?
+            ORDER BY data_lancamento ASC, id_transacao ASC;
         """
+        # Adapta placeholders para PostgreSQL se necessario
+        query = adapt_query(query)
         params = (conta_ofx_normalizada, data_inicio_str, data_fim_str)
         df = pd.read_sql_query(query, _get_raw_conn(conn), params=params)
 
-        if not df.empty and 'Data Lançamento' in df.columns:
-            df['Data Lançamento'] = pd.to_datetime(df['Data Lançamento'], errors='coerce').dt.date
+        if not df.empty and 'Data Lancamento' in df.columns:
+            df['Data Lancamento'] = pd.to_datetime(df['Data Lancamento'], errors='coerce').dt.date
 
         return df
 
