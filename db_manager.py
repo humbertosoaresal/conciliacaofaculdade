@@ -844,8 +844,11 @@ def carregar_extrato_bancario_historico(conta_ofx_normalizada: str, data_inicio:
             SELECT
                 id_transacao AS "ID Transacao",
                 data_lancamento AS "Data Lancamento",
-                valor, descricao AS "Descricao",
-                tipo, banco_ofx, conta_ofx_normalizada
+                valor AS "Valor",
+                descricao AS "Descricao",
+                tipo AS "Tipo",
+                banco_ofx AS "Banco_OFX",
+                conta_ofx_normalizada AS "Conta_OFX_Normalizada"
             FROM {EXTRATO_BANCARIO_TABLE}
             WHERE conta_ofx_normalizada = ? AND data_lancamento BETWEEN ? AND ?
             ORDER BY data_lancamento ASC, id_transacao ASC;
