@@ -45,7 +45,11 @@
       "WebSearch",
       "Bash(.venv_py312/Scripts/python.exe:*)",
       "Bash(.venv_py312/Scripts/pip.exe install:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git branch:*)",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []

@@ -69,18 +69,22 @@ def init_db():
             )
         ''')
         # Adicionar colunas se elas não existirem (para bancos de dados antigos)
+        # Usa Exception genérica para funcionar com SQLite e PostgreSQL
         try:
             c.execute(f"ALTER TABLE {CADASTRO_CONTAS_TABLE} ADD COLUMN Codigo_Banco TEXT")
-        except sqlite3.OperationalError:
-            pass # Coluna já existe
+            conn.commit()
+        except Exception:
+            conn.rollback()  # Coluna já existe
         try:
             c.execute(f"ALTER TABLE {CADASTRO_CONTAS_TABLE} ADD COLUMN Path_Logo TEXT")
-        except sqlite3.OperationalError:
-            pass  # Coluna já existe
+            conn.commit()
+        except Exception:
+            conn.rollback()  # Coluna já existe
         try:
             c.execute(f"ALTER TABLE {CADASTRO_CONTAS_TABLE} ADD COLUMN Conta_Contabil_Negativo TEXT")
-        except sqlite3.OperationalError:
-            pass  # Coluna já existe
+            conn.commit()
+        except Exception:
+            conn.rollback()  # Coluna já existe
 
         c.execute(f'''
             CREATE TABLE IF NOT EXISTS {EXTRATO_BANCARIO_TABLE} (
@@ -155,20 +159,24 @@ def init_db():
         # Adicionar colunas se não existirem (para bancos antigos)
         try:
             c.execute(f"ALTER TABLE {EMPRESA_TABLE} ADD COLUMN inscricao_estadual TEXT")
-        except sqlite3.OperationalError:
-            pass
+            conn.commit()
+        except Exception:
+            conn.rollback()
         try:
             c.execute(f"ALTER TABLE {EMPRESA_TABLE} ADD COLUMN inscricao_municipal TEXT")
-        except sqlite3.OperationalError:
-            pass
+            conn.commit()
+        except Exception:
+            conn.rollback()
         try:
             c.execute(f"ALTER TABLE {EMPRESA_TABLE} ADD COLUMN atividade_principal TEXT")
-        except sqlite3.OperationalError:
-            pass
+            conn.commit()
+        except Exception:
+            conn.rollback()
         try:
             c.execute(f"ALTER TABLE {EMPRESA_TABLE} ADD COLUMN atividades_secundarias TEXT")
-        except sqlite3.OperationalError:
-            pass
+            conn.commit()
+        except Exception:
+            conn.rollback()
 
         # Criar tabela de sócios
         c.execute(f'''
@@ -247,16 +255,19 @@ def init_db():
         # Adicionar colunas novas para parcelamentos existentes
         try:
             c.execute(f"ALTER TABLE {PARCELAMENTOS_TABLE} ADD COLUMN data_inicio TEXT")
-        except sqlite3.OperationalError:
-            pass
+            conn.commit()
+        except Exception:
+            conn.rollback()
         try:
             c.execute(f"ALTER TABLE {PARCELAMENTOS_TABLE} ADD COLUMN data_encerramento TEXT")
-        except sqlite3.OperationalError:
-            pass
+            conn.commit()
+        except Exception:
+            conn.rollback()
         try:
             c.execute(f"ALTER TABLE {PARCELAMENTOS_TABLE} ADD COLUMN motivo_encerramento TEXT")
-        except sqlite3.OperationalError:
-            pass
+            conn.commit()
+        except Exception:
+            conn.rollback()
 
         # Tabela de débitos do parcelamento
         c.execute(f'''
@@ -279,8 +290,9 @@ def init_db():
         # Adiciona coluna saldo_originario se não existir
         try:
             c.execute(f"ALTER TABLE {PARCELAMENTO_DEBITOS_TABLE} ADD COLUMN saldo_originario REAL")
-        except sqlite3.OperationalError:
-            pass
+            conn.commit()
+        except Exception:
+            conn.rollback()
 
         # Tabela de parcelas
         c.execute(f'''
@@ -307,8 +319,9 @@ def init_db():
         for col in ['valor_principal', 'valor_multa', 'valor_juros', 'valor_encargos']:
             try:
                 c.execute(f"ALTER TABLE {PARCELAMENTO_PARCELAS_TABLE} ADD COLUMN {col} REAL")
-            except sqlite3.OperationalError:
-                pass  # Coluna já existe
+                conn.commit()
+            except Exception:
+                conn.rollback()  # Coluna já existe
 
         # Tabela de pagamentos (histórico)
         c.execute(f'''
@@ -329,40 +342,27 @@ def init_db():
         ''')
 
         # Adicionar colunas para lançamentos contábeis se não existirem
-        try:
-            c.execute(f"ALTER TABLE {LANCAMENTOS_CONTABEIS_TABLE} ADD COLUMN reduz_deb TEXT")
-            c.execute(f"ALTER TABLE {LANCAMENTOS_CONTABEIS_TABLE} ADD COLUMN nome_conta_d TEXT")
-            c.execute(f"ALTER TABLE {LANCAMENTOS_CONTABEIS_TABLE} ADD COLUMN reduz_cred TEXT")
-            c.execute(f"ALTER TABLE {LANCAMENTOS_CONTABEIS_TABLE} ADD COLUMN nome_conta_c TEXT")
-        except sqlite3.OperationalError:
-            pass # Colunas já existem
-        try:
-            c.execute(f"ALTER TABLE {LANCAMENTOS_CONTABEIS_TABLE} ADD COLUMN origem TEXT")
-        except sqlite3.OperationalError:
-            pass # Coluna já existe
-        try:
-            c.execute(f"ALTER TABLE {LANCAMENTOS_CONTABEIS_TABLE} ADD COLUMN idlancamento TEXT")
-        except sqlite3.OperationalError:
-            pass # Coluna já existe
-        try:
-            c.execute(f"ALTER TABLE {LANCAMENTOS_CONTABEIS_TABLE} ADD COLUMN tipo_lancamento TEXT")
-        except sqlite3.OperationalError:
-            pass # Coluna já existe
+        for col in ['reduz_deb', 'nome_conta_d', 'reduz_cred', 'nome_conta_c', 'origem', 'idlancamento', 'tipo_lancamento']:
+            try:
+                c.execute(f"ALTER TABLE {LANCAMENTOS_CONTABEIS_TABLE} ADD COLUMN {col} TEXT")
+                conn.commit()
+            except Exception:
+                conn.rollback()  # Coluna já existe
 
-        # Adicionar colunas e renomear, se necessário, para o plano de contas
+        # Adicionar colunas para o plano de contas
+        for col in ['natureza', 'grau']:
+            try:
+                c.execute(f"ALTER TABLE {PLANO_CONTAS_TABLE} ADD COLUMN {col} TEXT")
+                conn.commit()
+            except Exception:
+                conn.rollback()  # Coluna já existe
+
+        # Renomear tipo_conta para tipo para compatibilidade
         try:
-            c.execute(f"ALTER TABLE {PLANO_CONTAS_TABLE} ADD COLUMN natureza TEXT")
-        except sqlite3.OperationalError:
-            pass # Coluna já existe
-        try:
-            c.execute(f"ALTER TABLE {PLANO_CONTAS_TABLE} ADD COLUMN grau TEXT")
-        except sqlite3.OperationalError:
-            pass # Coluna já existe
-        try:
-            # Renomear tipo_conta para tipo para compatibilidade
             c.execute(f"ALTER TABLE {PLANO_CONTAS_TABLE} RENAME COLUMN tipo_conta TO tipo")
-        except sqlite3.OperationalError:
-            pass # Coluna já existe ou a antiga não existe mais
+            conn.commit()
+        except Exception:
+            conn.rollback()  # Coluna já existe ou a antiga não existe mais
 
         conn.commit()
 
@@ -870,7 +870,7 @@ def limpar_extrato_bancario_historico():
             st.success(f"Tabela '{EXTRATO_BANCARIO_TABLE}' limpa com sucesso.")
             carregar_extrato_bancario_historico.clear()
             return True
-        except sqlite3.OperationalError as e:
+        except Exception as e:
             st.error(f"Erro ao tentar limpar o histórico de extrato: {e}")
             return False
 
