@@ -4173,7 +4173,7 @@ def exibir_detalhes_parcelamento(parcelamento_id: int):
 
 def exibir_formulario_edicao_parcelamento(parcelamento_id: int):
     """Exibe o formulário de edição de um parcelamento."""
-    from db_manager import carregar_parcelamento_por_id, atualizar_parcelamento
+    from db_manager import carregar_parcelamento_por_id, atualizar_parcelamento, carregar_plano_contas
 
     # Botão para voltar
     if st.button("⬅️ Voltar para Lista"):
@@ -4189,6 +4189,28 @@ def exibir_formulario_edicao_parcelamento(parcelamento_id: int):
             del st.session_state['parcelamento_editar']
         st.rerun()
         return
+
+    # Carrega plano de contas para os selectbox
+    df_plano = carregar_plano_contas()
+    if not df_plano.empty and 'codigo' in df_plano.columns and 'descricao' in df_plano.columns:
+        opcoes_contas = [""] + [f"{row['codigo']} - {row['descricao']}" for _, row in df_plano.iterrows()]
+    else:
+        opcoes_contas = [""]
+
+    def get_conta_index(conta_valor):
+        """Retorna o índice da conta na lista de opções."""
+        if not conta_valor:
+            return 0
+        for i, opcao in enumerate(opcoes_contas):
+            if opcao.startswith(str(conta_valor)):
+                return i
+        return 0
+
+    def extrair_codigo_conta(opcao_selecionada):
+        """Extrai o código da conta da opção selecionada."""
+        if not opcao_selecionada or opcao_selecionada == "":
+            return None
+        return opcao_selecionada.split(" - ")[0] if " - " in opcao_selecionada else opcao_selecionada
 
     st.markdown(f"## ✏️ Editar Parcelamento {parcelamento.get('numero_parcelamento', 'N/A')}")
 
@@ -4235,6 +4257,42 @@ def exibir_formulario_edicao_parcelamento(parcelamento_id: int):
             valor_total = st.number_input("Valor Total Consolidado", value=float(parcelamento.get('valor_total_consolidado', 0) or 0), min_value=0.0, format="%.2f")
             saldo_devedor = st.number_input("Saldo Devedor", value=float(parcelamento.get('saldo_devedor', 0) or 0), min_value=0.0, format="%.2f")
 
+        st.markdown("---")
+        st.markdown("##### Contas Contábeis (para Lançamentos)")
+        st.caption("Configure as contas para geração automática de lançamentos contábeis")
+
+        col5, col6 = st.columns(2)
+        with col5:
+            conta_principal = st.selectbox(
+                "Conta Principal (Débito Tributário)",
+                options=opcoes_contas,
+                index=get_conta_index(parcelamento.get('conta_contabil_principal')),
+                help="Conta onde está registrado o débito tributário parcelado"
+            )
+            conta_multa = st.selectbox(
+                "Conta Multa",
+                options=opcoes_contas,
+                index=get_conta_index(parcelamento.get('conta_contabil_multa')),
+                help="Conta de despesa com multas (opcional)"
+            )
+        with col6:
+            conta_juros = st.selectbox(
+                "Conta Juros",
+                options=opcoes_contas,
+                index=get_conta_index(parcelamento.get('conta_contabil_juros')),
+                help="Conta de despesa com juros (opcional)"
+            )
+            conta_banco = st.selectbox(
+                "Conta Banco (Pagamento)",
+                options=opcoes_contas,
+                index=get_conta_index(parcelamento.get('conta_contabil_banco')),
+                help="Conta bancária de onde saem os pagamentos"
+            )
+
+        st.markdown("---")
+        st.markdown("##### Observações")
+        observacoes = st.text_area("Observações", value=parcelamento.get('observacoes', '') or '', height=80)
+
         submitted = st.form_submit_button("💾 Salvar Alterações", type="primary", use_container_width=True)
 
         if submitted:
@@ -4255,7 +4313,12 @@ def exibir_formulario_edicao_parcelamento(parcelamento_id: int):
                 'valor_multa': valor_multa,
                 'valor_juros': valor_juros,
                 'valor_total_consolidado': valor_total,
-                'saldo_devedor': saldo_devedor
+                'saldo_devedor': saldo_devedor,
+                'conta_contabil_principal': extrair_codigo_conta(conta_principal),
+                'conta_contabil_multa': extrair_codigo_conta(conta_multa),
+                'conta_contabil_juros': extrair_codigo_conta(conta_juros),
+                'conta_contabil_banco': extrair_codigo_conta(conta_banco),
+                'observacoes': observacoes if observacoes else None
             }
 
             if atualizar_parcelamento(parcelamento_id, dados_atualizacao):
