@@ -74,6 +74,8 @@ def init_db():
                 UNIQUE(Codigo_Banco, Conta_OFX_Normalizada)
             )
         ''')
+        conn.commit()  # Commit após criar tabela (importante para PostgreSQL)
+
         # Adicionar colunas se elas não existirem (para bancos de dados antigos)
         # Usa Exception genérica para funcionar com SQLite e PostgreSQL
         try:
@@ -94,7 +96,8 @@ def init_db():
 
         c.execute(f'''
             CREATE TABLE IF NOT EXISTS {EXTRATO_BANCARIO_TABLE} (
-                ID_Transacao TEXT PRIMARY KEY,
+                ID_Unico TEXT PRIMARY KEY,
+                ID_Transacao TEXT,
                 Data_Lancamento DATE,
                 Valor REAL,
                 Descricao TEXT,
@@ -103,12 +106,16 @@ def init_db():
                 Conta_OFX_Normalizada TEXT
             )
         ''')
+        conn.commit()
+
         c.execute(f'''
             CREATE TABLE IF NOT EXISTS {MAPEAMENTO_BANCOS_TABLE} (
                 Codigo_Banco TEXT PRIMARY KEY,
                 Nome_Banco TEXT
             )
         ''')
+        conn.commit()
+
         c.execute(f'''
             CREATE TABLE IF NOT EXISTS {PLANO_CONTAS_TABLE} (
                 codigo TEXT PRIMARY KEY,
@@ -122,6 +129,8 @@ def init_db():
                 data_encerramento TEXT
             )
         ''')
+        conn.commit()
+
         c.execute(f'''
             CREATE TABLE IF NOT EXISTS {LANCAMENTOS_CONTABEIS_TABLE} (
                 id {AUTO_INCREMENT},
@@ -137,6 +146,8 @@ def init_db():
                 origem TEXT
             )
         ''')
+        conn.commit()
+
         c.execute(f'''
             CREATE TABLE IF NOT EXISTS {EMPRESA_TABLE} (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -161,6 +172,7 @@ def init_db():
                 data_cadastro TEXT
             )
         ''')
+        conn.commit()
 
         # Adicionar colunas se não existirem (para bancos antigos)
         try:
@@ -206,6 +218,7 @@ def init_db():
                 FOREIGN KEY (empresa_id) REFERENCES {EMPRESA_TABLE}(id)
             )
         ''')
+        conn.commit()
 
         # Criar tabela de logotipos
         c.execute(f'''
@@ -220,6 +233,7 @@ def init_db():
                 FOREIGN KEY (empresa_id) REFERENCES {EMPRESA_TABLE}(id)
             )
         ''')
+        conn.commit()
 
         # ==========================================
         # TABELAS DE PARCELAMENTOS
@@ -257,6 +271,7 @@ def init_db():
                 observacoes TEXT
             )
         ''')
+        conn.commit()
 
         # Adicionar colunas novas para parcelamentos existentes
         try:
@@ -292,6 +307,7 @@ def init_db():
                 FOREIGN KEY (parcelamento_id) REFERENCES {PARCELAMENTOS_TABLE}(id)
             )
         ''')
+        conn.commit()
 
         # Adiciona coluna saldo_originario se não existir
         try:
@@ -320,6 +336,7 @@ def init_db():
                 FOREIGN KEY (parcelamento_id) REFERENCES {PARCELAMENTOS_TABLE}(id)
             )
         ''')
+        conn.commit()
 
         # Adiciona colunas novas para PGFN (bancos antigos)
         for col in ['valor_principal', 'valor_multa', 'valor_juros', 'valor_encargos']:
@@ -346,6 +363,7 @@ def init_db():
                 FOREIGN KEY (parcelamento_id) REFERENCES {PARCELAMENTOS_TABLE}(id)
             )
         ''')
+        conn.commit()
 
         # Adicionar colunas para lançamentos contábeis se não existirem
         for col in ['reduz_deb', 'nome_conta_d', 'reduz_cred', 'nome_conta_c', 'origem', 'idlancamento', 'tipo_lancamento']:
@@ -493,10 +511,12 @@ def salvar_contas_ofx_faltantes(df_ofx: pd.DataFrame, df_cadastro_atual: pd.Data
                 df_final.to_sql(CADASTRO_CONTAS_TABLE, conn, if_exists='append', index=False)
                 st.success(f"Adicionadas {len(df_final)} novas contas ao cadastro.")
                 # carregar_cadastro_contas.clear()  # Desabilitado - cache desligado
-            except sqlite3.IntegrityError as e:
-                st.warning(f"Aviso de Integridade do Banco de Dados: Uma ou mais contas já existiam e foram ignoradas. Detalhe: {e}")
             except Exception as e:
-                st.error(f"Erro ao salvar novas contas no cadastro: {e}")
+                error_str = str(e).lower()
+                if 'integrity' in error_str or 'duplicate' in error_str or 'unique' in error_str:
+                    st.warning(f"Aviso de Integridade do Banco de Dados: Uma ou mais contas ja existiam e foram ignoradas. Detalhe: {e}")
+                else:
+                    st.error(f"Erro ao salvar novas contas no cadastro: {e}")
 
 def excluir_conta_cadastro(conta_ofx_normalizada: str) -> bool:
     """Exclui uma conta específica do cadastro."""
@@ -639,47 +659,36 @@ def excluir_lancamentos_por_ids(ids: list):
             st.error(f"Erro ao excluir lançamentos: {e}")
 
 def excluir_lancamentos_por_idlancamentos(idlancamentos):
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    placeholders = ','.join('?' for _ in idlancamentos)
-    cursor.execute(f"DELETE FROM lancamentos_contabeis WHERE idlancamento IN ({placeholders})", idlancamentos) # Linha reinserida
-    conn.commit()
-    carregar_lancamentos_contabeis.clear() # Invalida o cache (agora no lugar certo)
-    conn.close()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        placeholders = ','.join([PH for _ in idlancamentos])
+        cursor.execute(f"DELETE FROM {LANCAMENTOS_CONTABEIS_TABLE} WHERE idlancamento IN ({placeholders})", idlancamentos)
+        conn.commit()
+        carregar_lancamentos_contabeis.clear()
     return True
 
 
 
 def salvar_partidas_lancamento(partidas):
-    print(f"DEBUG: Partidas recebidas para salvar: {partidas}") # Linha de depuração
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    
-    # Certificar-se de que a tabela existe
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS lancamentos_contabeis (
-            idlancamento TEXT,
-            data_lancamento TEXT,
-            historico TEXT,
-            valor REAL,
-            tipo_lancamento TEXT,
-            reduz_deb TEXT,
-            nome_conta_d TEXT,
-            reduz_cred TEXT,
-            nome_conta_c TEXT,
-            origem TEXT
-        )
-    """)
+    print(f"DEBUG: Partidas recebidas para salvar: {partidas}")
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
 
-    for partida in partidas:
-        cursor.execute("""
-            INSERT INTO lancamentos_contabeis (idlancamento, data_lancamento, historico, valor, tipo_lancamento, reduz_deb, nome_conta_d, reduz_cred, nome_conta_c, origem)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (partida['idlancamento'], partida['data_lancamento'], partida['historico'], partida['valor'], partida['tipo_lancamento'], partida['reduz_deb'], partida['nome_conta_d'], partida['reduz_cred'], partida['nome_conta_c'], partida['origem']))
-    
-    conn.commit()
-    conn.close()
-    carregar_lancamentos_contabeis.clear() # Invalida o cache
+        for partida in partidas:
+            query = f"""
+                INSERT INTO {LANCAMENTOS_CONTABEIS_TABLE}
+                (idlancamento, data_lancamento, historico, valor, tipo_lancamento, reduz_deb, nome_conta_d, reduz_cred, nome_conta_c, origem)
+                VALUES ({PH}, {PH}, {PH}, {PH}, {PH}, {PH}, {PH}, {PH}, {PH}, {PH})
+            """
+            cursor.execute(query, (
+                partida['idlancamento'], partida['data_lancamento'], partida['historico'],
+                partida['valor'], partida['tipo_lancamento'], partida['reduz_deb'],
+                partida['nome_conta_d'], partida['reduz_cred'], partida['nome_conta_c'],
+                partida['origem']
+            ))
+
+        conn.commit()
+        carregar_lancamentos_contabeis.clear()
     return True
 
 
@@ -754,61 +763,6 @@ def salvar_extrato_bancario_historico(df_ofx: pd.DataFrame):
                 chave_com_sufixo = f"{chave_base}_DUP{contador_duplicatas[chave_base]}"
                 return hashlib.md5(chave_com_sufixo.encode()).hexdigest()
 
-        # Verifica se a coluna ID_Unico já existe na tabela
-        try:
-            c.execute(f"PRAGMA table_info({EXTRATO_BANCARIO_TABLE})")
-            columns_info = c.fetchall()
-            has_id_unico = any(col[1] == 'ID_Unico' for col in columns_info)
-
-            if not has_id_unico:
-                # Adiciona a coluna ID_Unico se não existir
-                c.execute(f"ALTER TABLE {EXTRATO_BANCARIO_TABLE} ADD COLUMN ID_Unico TEXT")
-                conn.commit()
-
-                # Remove constraint da PRIMARY KEY antiga (recriar tabela)
-                st.warning("Reestruturando banco de dados para suportar IDs duplicados do OFX...")
-                c.execute(f"DROP TABLE IF EXISTS {EXTRATO_BANCARIO_TABLE}_backup")
-                c.execute(f"ALTER TABLE {EXTRATO_BANCARIO_TABLE} RENAME TO {EXTRATO_BANCARIO_TABLE}_backup")
-
-                c.execute(f'''
-                    CREATE TABLE {EXTRATO_BANCARIO_TABLE} (
-                        ID_Unico TEXT PRIMARY KEY,
-                        ID_Transacao TEXT,
-                        Data_Lancamento DATE,
-                        Valor REAL,
-                        Descricao TEXT,
-                        Tipo TEXT,
-                        Banco_OFX TEXT,
-                        Conta_OFX_Normalizada TEXT
-                    )
-                ''')
-
-                # Migra dados antigos com lógica de ID único
-                c.execute(f"SELECT * FROM {EXTRATO_BANCARIO_TABLE}_backup")
-                old_data = c.fetchall()
-                if old_data:
-                    # Criar DataFrame temporário para aplicar a mesma lógica de ID único
-                    df_old = pd.DataFrame(old_data, columns=['ID_Transacao', 'Data_Lancamento', 'Valor', 'Descricao', 'Tipo', 'Banco_OFX', 'Conta_OFX_Normalizada'])
-                    contador_dup_old = {}
-                    ids_unicos_old = []
-                    for _, row in df_old.iterrows():
-                        ids_unicos_old.append(gerar_id_unico(row, contador_dup_old))
-                    df_old['ID_Unico'] = ids_unicos_old
-
-                    for _, row in df_old.iterrows():
-                        c.execute(f"""
-                            INSERT OR IGNORE INTO {EXTRATO_BANCARIO_TABLE}
-                            (ID_Unico, ID_Transacao, Data_Lancamento, Valor, Descricao, Tipo, Banco_OFX, Conta_OFX_Normalizada)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (row['ID_Unico'], row['ID_Transacao'], row['Data_Lancamento'], row['Valor'], row['Descricao'], row['Tipo'], row['Banco_OFX'], row['Conta_OFX_Normalizada']))
-
-                c.execute(f"DROP TABLE {EXTRATO_BANCARIO_TABLE}_backup")
-                conn.commit()
-                st.success("Banco de dados reestruturado com sucesso!")
-
-        except Exception as e:
-            st.warning(f"Aviso na verificação de estrutura: {e}")
-
         # Adiciona ID_Unico ao DataFrame (detecta e diferencia duplicatas)
         contador_duplicatas = {}
         ids_unicos = []
@@ -819,15 +773,21 @@ def salvar_extrato_bancario_historico(df_ofx: pd.DataFrame):
         # Informa se houve transações duplicadas
         total_duplicatas = sum(1 for v in contador_duplicatas.values() if v > 0)
         if total_duplicatas > 0:
-            st.info(f"ℹ️ {total_duplicatas} transação(ões) idêntica(s) detectada(s) e diferenciada(s) automaticamente.")
+            st.info(f"{total_duplicatas} transacao(oes) identica(s) detectada(s) e diferenciada(s) automaticamente.")
 
         # Reordena colunas para ID_Unico primeiro
         cols_order = ['ID_Unico'] + [col for col in df_save.columns if col != 'ID_Unico']
         df_save = df_save[cols_order]
 
         columns = ', '.join(df_save.columns)
-        placeholders = ', '.join(['?' for _ in df_save.columns])
-        insert_query = f"INSERT OR IGNORE INTO {EXTRATO_BANCARIO_TABLE} ({columns}) VALUES ({placeholders})"
+        placeholders = ', '.join([PH for _ in df_save.columns])
+
+        # Sintaxe diferente para ignorar duplicatas (SQLite vs PostgreSQL)
+        if IS_PRODUCTION:
+            insert_query = f"INSERT INTO {EXTRATO_BANCARIO_TABLE} ({columns}) VALUES ({placeholders}) ON CONFLICT (ID_Unico) DO NOTHING"
+        else:
+            insert_query = f"INSERT OR IGNORE INTO {EXTRATO_BANCARIO_TABLE} ({columns}) VALUES ({placeholders})"
+
         data_to_insert = [tuple(row) for row in df_save.values]
 
         try:
@@ -838,9 +798,9 @@ def salvar_extrato_bancario_historico(df_ofx: pd.DataFrame):
                 carregar_extrato_bancario_historico.clear()
             except:
                 pass  # Ignora erro se cache não disponível
-            st.info(f"OK - {len(data_to_insert)} transações processadas para salvamento no histórico.")
+            st.info(f"OK - {len(data_to_insert)} transacoes processadas para salvamento no historico.")
         except Exception as e:
-            st.error(f"Erro ao inserir dados no histórico do extrato: {e}")
+            st.error(f"Erro ao inserir dados no historico do extrato: {e}")
             conn.rollback()
 
 @st.cache_data(show_spinner="Carregando histórico do banco de dados...")
@@ -1157,18 +1117,26 @@ def salvar_parcelamento(dados: dict) -> int:
             placeholders = ', '.join(['?' for _ in dados])
             valores = list(dados.values())
 
-            query = f"INSERT INTO {PARCELAMENTOS_TABLE} ({campos}) VALUES ({placeholders})"
-            c.execute(query, valores)
-            conn.commit()
+            # PostgreSQL usa RETURNING, SQLite usa lastrowid
+            if IS_PRODUCTION:
+                query = f"INSERT INTO {PARCELAMENTOS_TABLE} ({campos}) VALUES ({placeholders}) RETURNING id"
+                c.execute(query, valores)
+                result = c.fetchone()
+                parcelamento_id = result[0] if result else None
+            else:
+                query = f"INSERT INTO {PARCELAMENTOS_TABLE} ({campos}) VALUES ({placeholders})"
+                c.execute(query, valores)
+                parcelamento_id = c.lastrowid
 
-            parcelamento_id = c.lastrowid
+            conn.commit()
             carregar_parcelamentos.clear()
             return parcelamento_id
-    except sqlite3.IntegrityError:
-        st.error("Já existe um parcelamento com este número!")
-        return None
     except Exception as e:
-        st.error(f"Erro ao salvar parcelamento: {e}")
+        error_str = str(e).lower()
+        if 'integrity' in error_str or 'duplicate' in error_str or 'unique' in error_str:
+            st.error("Ja existe um parcelamento com este numero!")
+        else:
+            st.error(f"Erro ao salvar parcelamento: {e}")
         return None
 
 

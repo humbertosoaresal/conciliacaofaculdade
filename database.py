@@ -26,11 +26,91 @@ else:
 SQLITE_FILE = 'conciliacao_db.sqlite'
 
 
+def get_placeholder():
+    """Retorna o placeholder correto para o banco atual."""
+    return '%s' if IS_PRODUCTION else '?'
+
+
+def get_db_type():
+    """Retorna o tipo do banco de dados atual."""
+    return 'postgresql' if IS_PRODUCTION else 'sqlite'
+
+
+def adapt_query(query):
+    """Adapta uma query para o banco de dados atual (converte ? para %s se PostgreSQL)."""
+    if IS_PRODUCTION:
+        return query.replace('?', '%s')
+    return query
+
+
+class AdaptedCursor:
+    """Wrapper de cursor que adapta automaticamente queries para PostgreSQL."""
+    def __init__(self, cursor):
+        self._cursor = cursor
+
+    def execute(self, query, params=None):
+        adapted = adapt_query(query)
+        if params is not None:
+            return self._cursor.execute(adapted, params)
+        return self._cursor.execute(adapted)
+
+    def executemany(self, query, params_list):
+        adapted = adapt_query(query)
+        return self._cursor.executemany(adapted, params_list)
+
+    def fetchone(self):
+        return self._cursor.fetchone()
+
+    def fetchall(self):
+        return self._cursor.fetchall()
+
+    @property
+    def lastrowid(self):
+        return self._cursor.lastrowid
+
+    @property
+    def rowcount(self):
+        return self._cursor.rowcount
+
+    def __getattr__(self, name):
+        return getattr(self._cursor, name)
+
+
+class AdaptedConnection:
+    """Wrapper de conexão que retorna cursores adaptados."""
+    def __init__(self, conn):
+        self._conn = conn
+
+    def cursor(self):
+        return AdaptedCursor(self._conn.cursor())
+
+    def commit(self):
+        return self._conn.commit()
+
+    def rollback(self):
+        return self._conn.rollback()
+
+    def close(self):
+        return self._conn.close()
+
+    def execute(self, query, params=None):
+        """Executa diretamente na conexão (para pandas.to_sql e outros)."""
+        adapted = adapt_query(query)
+        cursor = self._conn.cursor()
+        if params:
+            cursor.execute(adapted, params)
+        else:
+            cursor.execute(adapted)
+        return cursor
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+
 def get_connection():
     """Retorna uma conexão com o banco de dados apropriado."""
     if IS_PRODUCTION:
         # PostgreSQL na nuvem
-        # Railway usa DATABASE_URL no formato: postgresql://user:pass@host:port/db
         url = DATABASE_URL
         if url.startswith('postgres://'):
             url = url.replace('postgres://', 'postgresql://', 1)
@@ -42,10 +122,11 @@ def get_connection():
 
 @contextmanager
 def get_db_connection():
-    """Context manager para conexão com o banco."""
+    """Context manager para conexão com o banco (com adaptação automática de queries)."""
     conn = get_connection()
+    adapted = AdaptedConnection(conn)
     try:
-        yield conn
+        yield adapted
     finally:
         conn.close()
 
@@ -55,10 +136,6 @@ def execute_query(query, params=None, fetch=False, fetchone=False, commit=True):
     Executa uma query no banco de dados.
     Adapta automaticamente a sintaxe para SQLite ou PostgreSQL.
     """
-    # Adaptar placeholders: SQLite usa ?, PostgreSQL usa %s
-    if IS_PRODUCTION and params:
-        query = query.replace('?', '%s')
-
     with get_db_connection() as conn:
         cursor = conn.cursor()
 
@@ -111,17 +188,7 @@ def table_exists(table_name):
         return result is not None
 
 
-def get_placeholder():
-    """Retorna o placeholder correto para o banco atual."""
-    return '%s' if IS_PRODUCTION else '?'
-
-
-def get_db_type():
-    """Retorna o tipo do banco de dados atual."""
-    return 'postgresql' if IS_PRODUCTION else 'sqlite'
-
-
 # Informações para debug
 if __name__ == '__main__':
-    print(f"Ambiente: {'PRODUÇÃO (PostgreSQL)' if IS_PRODUCTION else 'LOCAL (SQLite)'}")
-    print(f"DATABASE_URL: {'Configurado' if DATABASE_URL else 'Não configurado'}")
+    print(f"Ambiente: {'PRODUCAO (PostgreSQL)' if IS_PRODUCTION else 'LOCAL (SQLite)'}")
+    print(f"DATABASE_URL: {'Configurado' if DATABASE_URL else 'Nao configurado'}")
