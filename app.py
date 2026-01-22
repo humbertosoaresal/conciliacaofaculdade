@@ -4345,17 +4345,8 @@ def submenu_parcelamentos_cadastro():
     st.subheader("8.1 Cadastro de Parcelamentos")
     st.markdown("Gerencie os parcelamentos tributários da empresa (Receita Federal, PGFN, Procuradoria).")
 
-    # Verifica se há parcelamento selecionado para exibir detalhes
-    if st.session_state.get('parcelamento_selecionado'):
-        parcelamento_id = st.session_state['parcelamento_selecionado']
-        exibir_detalhes_parcelamento(parcelamento_id)
-        return
-
-    # Verifica se há parcelamento para editar
-    if st.session_state.get('parcelamento_editar'):
-        parcelamento_id = st.session_state['parcelamento_editar']
-        exibir_formulario_edicao_parcelamento(parcelamento_id)
-        return
+    # Nota: A verificação de parcelamento_selecionado e parcelamento_editar
+    # é feita no menu 8 principal para evitar interferência do selectbox
 
     # Carregar parcelamentos existentes
     df_parcelamentos = carregar_parcelamentos()
