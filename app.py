@@ -4360,19 +4360,32 @@ def submenu_parcelamentos_cadastro():
         exibir_formulario_novo_parcelamento_simples()
         return
 
-    # Criar lista de opções para selectbox
-    opcoes_parcelamentos = ["-- Selecione um parcelamento --"] + [
-        f"{row['id']} | {row['numero_parcelamento']} - {row.get('orgao', 'N/A')}"
-        for _, row in df_parcelamentos.iterrows()
-    ]
+    # SELEÇÃO DO PARCELAMENTO - sempre visível
+    st.markdown("### Selecione um Parcelamento")
 
-    # TABS - tudo inline sem navegação
-    tab_lista, tab_detalhes, tab_editar, tab_novo = st.tabs([
-        "📋 Lista", "🔍 Ver Detalhes", "✏️ Editar", "➕ Novo"
-    ])
+    opcoes_parcelamentos = [f"{row['id']} | {row['numero_parcelamento']} - {row.get('orgao', 'N/A')}" for _, row in df_parcelamentos.iterrows()]
 
-    # === TAB LISTA ===
-    with tab_lista:
+    parc_selecionado = st.selectbox(
+        "Parcelamento:",
+        opcoes_parcelamentos,
+        key="select_parcelamento_principal"
+    )
+
+    # Extrai ID
+    parc_id = int(parc_selecionado.split(" | ")[0])
+
+    # AÇÃO - sempre visível
+    acao = st.radio(
+        "O que deseja fazer?",
+        ["📋 Ver Lista", "🔍 Ver Detalhes", "✏️ Editar", "➕ Novo Parcelamento"],
+        horizontal=True,
+        key="radio_acao"
+    )
+
+    st.markdown("---")
+
+    # === VER LISTA ===
+    if acao == "📋 Ver Lista":
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Total", len(df_parcelamentos))
@@ -4386,152 +4399,119 @@ def submenu_parcelamentos_cadastro():
             rescindidos = len(df_parcelamentos[df_parcelamentos['situacao'] == 'Rescindido']) if 'situacao' in df_parcelamentos.columns else 0
             st.metric("Rescindidos", rescindidos)
 
-        st.markdown("---")
         df_display = df_parcelamentos[['numero_parcelamento', 'orgao', 'situacao', 'saldo_devedor', 'qtd_parcelas']].copy()
         df_display.columns = ['Número', 'Órgão', 'Situação', 'Saldo Devedor', 'Parcelas']
         df_display['Saldo Devedor'] = df_display['Saldo Devedor'].apply(lambda x: formatar_moeda(x) if pd.notna(x) else 'R$ 0,00')
         st.dataframe(df_display, use_container_width=True, hide_index=True)
 
-    # === TAB VER DETALHES ===
-    with tab_detalhes:
-        parc_selecionado_ver = st.selectbox(
-            "Selecione o Parcelamento:",
-            opcoes_parcelamentos,
-            key="select_ver_detalhes"
-        )
+    # === VER DETALHES ===
+    elif acao == "🔍 Ver Detalhes":
+        parcelamento = carregar_parcelamento_por_id(parc_id)
 
-        # DEBUG
-        st.caption(f"Selecionado: {parc_selecionado_ver}")
+        if parcelamento:
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.markdown("##### Dados Básicos")
+                st.write(f"**Número:** {parcelamento.get('numero_parcelamento', 'N/A')}")
+                st.write(f"**CNPJ:** {parcelamento.get('cnpj', 'N/A')}")
+                st.write(f"**Órgão:** {parcelamento.get('orgao', 'N/A')}")
+                st.write(f"**Modalidade:** {parcelamento.get('modalidade', 'N/A')}")
+                st.write(f"**Situação:** {parcelamento.get('situacao', 'N/A')}")
+            with col2:
+                st.markdown("##### Datas")
+                st.write(f"**Data Início:** {parcelamento.get('data_inicio', 'N/A')}")
+                st.write(f"**Data Adesão:** {parcelamento.get('data_adesao', 'N/A')}")
+                st.write(f"**Data Consolidação:** {parcelamento.get('data_consolidacao', 'N/A')}")
+                st.write(f"**Qtd. Parcelas:** {parcelamento.get('qtd_parcelas', 0)}")
+                st.write(f"**Valor Parcela:** {formatar_moeda(parcelamento.get('valor_parcela', 0))}")
+            with col3:
+                st.markdown("##### Valores")
+                st.write(f"**Principal:** {formatar_moeda(parcelamento.get('valor_principal', 0))}")
+                st.write(f"**Multa:** {formatar_moeda(parcelamento.get('valor_multa', 0))}")
+                st.write(f"**Juros:** {formatar_moeda(parcelamento.get('valor_juros', 0))}")
+                st.write(f"**Total Consolidado:** {formatar_moeda(parcelamento.get('valor_total_consolidado', 0))}")
+                st.write(f"**Saldo Devedor:** {formatar_moeda(parcelamento.get('saldo_devedor', 0))}")
+        else:
+            st.error("Parcelamento não encontrado!")
 
-        if parc_selecionado_ver and parc_selecionado_ver != "-- Selecione um parcelamento --":
-            parc_id = int(parc_selecionado_ver.split(" | ")[0])
-            st.caption(f"ID extraído: {parc_id}")
-            parcelamento = carregar_parcelamento_por_id(parc_id)
-            st.caption(f"Parcelamento carregado: {parcelamento is not None}")
+    # === EDITAR ===
+    elif acao == "✏️ Editar":
+        parcelamento = carregar_parcelamento_por_id(parc_id)
 
-            if parcelamento:
-                st.markdown("---")
+        if parcelamento:
+            df_plano = carregar_plano_contas()
+            opcoes_contas = [""] + [f"{row['codigo']} - {row['descricao']}" for _, row in df_plano.iterrows()] if not df_plano.empty else [""]
+
+            with st.form("form_editar_parcelamento"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    numero = st.text_input("Número", value=parcelamento.get('numero_parcelamento', ''))
+                    cnpj = st.text_input("CNPJ", value=parcelamento.get('cnpj', '') or '')
+                    orgao = st.selectbox("Órgão", ["Receita Federal", "PGFN", "Procuradoria"],
+                        index=["Receita Federal", "PGFN", "Procuradoria"].index(parcelamento.get('orgao', 'Receita Federal')) if parcelamento.get('orgao') in ["Receita Federal", "PGFN", "Procuradoria"] else 0)
+                    modalidade = st.text_input("Modalidade", value=parcelamento.get('modalidade', '') or '')
+
+                with col2:
+                    situacao = st.selectbox("Situação", ["Ativo", "Consolidado", "Rescindido", "Quitado"],
+                        index=["Ativo", "Consolidado", "Rescindido", "Quitado"].index(parcelamento.get('situacao', 'Ativo')) if parcelamento.get('situacao') in ["Ativo", "Consolidado", "Rescindido", "Quitado"] else 0)
+                    qtd_parcelas = st.number_input("Qtd. Parcelas", min_value=1, value=int(parcelamento.get('qtd_parcelas', 60) or 60))
+                    valor_parcela = st.number_input("Valor Parcela", min_value=0.0, value=float(parcelamento.get('valor_parcela', 0) or 0), format="%.2f")
+
+                st.markdown("##### Valores")
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.markdown("##### Dados Básicos")
-                    st.write(f"**Número:** {parcelamento.get('numero_parcelamento', 'N/A')}")
-                    st.write(f"**CNPJ:** {parcelamento.get('cnpj', 'N/A')}")
-                    st.write(f"**Órgão:** {parcelamento.get('orgao', 'N/A')}")
-                    st.write(f"**Modalidade:** {parcelamento.get('modalidade', 'N/A')}")
-                    st.write(f"**Situação:** {parcelamento.get('situacao', 'N/A')}")
+                    valor_principal = st.number_input("Principal", min_value=0.0, value=float(parcelamento.get('valor_principal', 0) or 0), format="%.2f")
                 with col2:
-                    st.markdown("##### Datas")
-                    st.write(f"**Data Início:** {parcelamento.get('data_inicio', 'N/A')}")
-                    st.write(f"**Data Adesão:** {parcelamento.get('data_adesao', 'N/A')}")
-                    st.write(f"**Data Consolidação:** {parcelamento.get('data_consolidacao', 'N/A')}")
-                    st.write(f"**Qtd. Parcelas:** {parcelamento.get('qtd_parcelas', 0)}")
-                    st.write(f"**Valor Parcela:** {formatar_moeda(parcelamento.get('valor_parcela', 0))}")
+                    valor_multa = st.number_input("Multa", min_value=0.0, value=float(parcelamento.get('valor_multa', 0) or 0), format="%.2f")
                 with col3:
-                    st.markdown("##### Valores")
-                    st.write(f"**Principal:** {formatar_moeda(parcelamento.get('valor_principal', 0))}")
-                    st.write(f"**Multa:** {formatar_moeda(parcelamento.get('valor_multa', 0))}")
-                    st.write(f"**Juros:** {formatar_moeda(parcelamento.get('valor_juros', 0))}")
-                    st.write(f"**Total Consolidado:** {formatar_moeda(parcelamento.get('valor_total_consolidado', 0))}")
-                    st.write(f"**Saldo Devedor:** {formatar_moeda(parcelamento.get('saldo_devedor', 0))}")
-            else:
-                st.error("Parcelamento não encontrado no banco de dados!")
+                    valor_juros = st.number_input("Juros", min_value=0.0, value=float(parcelamento.get('valor_juros', 0) or 0), format="%.2f")
+
+                st.markdown("##### Contas Contábeis")
+                col1, col2 = st.columns(2)
+                with col1:
+                    conta_principal = st.selectbox("Conta Principal", opcoes_contas, key="cp_edit")
+                    conta_multa = st.selectbox("Conta Multa", opcoes_contas, key="cm_edit")
+                with col2:
+                    conta_juros = st.selectbox("Conta Juros", opcoes_contas, key="cj_edit")
+                    conta_banco = st.selectbox("Conta Banco", opcoes_contas, key="cb_edit")
+
+                observacoes = st.text_area("Observações", value=parcelamento.get('observacoes', '') or '')
+
+                submitted = st.form_submit_button("💾 Salvar Alterações", use_container_width=True)
+
+                if submitted:
+                    def extrair_codigo(sel):
+                        return sel.split(" - ")[0] if sel and " - " in sel else None
+
+                    dados = {
+                        'numero_parcelamento': numero,
+                        'cnpj': cnpj,
+                        'orgao': orgao,
+                        'modalidade': modalidade,
+                        'situacao': situacao,
+                        'qtd_parcelas': qtd_parcelas,
+                        'valor_parcela': valor_parcela,
+                        'valor_principal': valor_principal,
+                        'valor_multa': valor_multa,
+                        'valor_juros': valor_juros,
+                        'valor_total_consolidado': valor_principal + valor_multa + valor_juros,
+                        'saldo_devedor': valor_principal + valor_multa + valor_juros,
+                        'conta_contabil_principal': extrair_codigo(conta_principal),
+                        'conta_contabil_multa': extrair_codigo(conta_multa),
+                        'conta_contabil_juros': extrair_codigo(conta_juros),
+                        'conta_contabil_banco': extrair_codigo(conta_banco),
+                        'observacoes': observacoes
+                    }
+                    if atualizar_parcelamento(parc_id, dados):
+                        st.success("Parcelamento atualizado!")
+                        st.rerun()
+                    else:
+                        st.error("Erro ao atualizar!")
         else:
-            st.info("Selecione um parcelamento acima para ver os detalhes.")
+            st.error("Parcelamento não encontrado!")
 
-    # === TAB EDITAR ===
-    with tab_editar:
-        parc_selecionado_edit = st.selectbox(
-            "Selecione o Parcelamento para Editar:",
-            opcoes_parcelamentos,
-            key="select_editar"
-        )
-
-        # DEBUG
-        st.caption(f"Selecionado para editar: {parc_selecionado_edit}")
-
-        if parc_selecionado_edit and parc_selecionado_edit != "-- Selecione um parcelamento --":
-            parc_id = int(parc_selecionado_edit.split(" | ")[0])
-            st.caption(f"ID extraído: {parc_id}")
-            parcelamento = carregar_parcelamento_por_id(parc_id)
-            st.caption(f"Parcelamento carregado: {parcelamento is not None}")
-
-            if parcelamento:
-                st.markdown("---")
-
-                # Carrega plano de contas
-                df_plano = carregar_plano_contas()
-                opcoes_contas = [""] + [f"{row['codigo']} - {row['descricao']}" for _, row in df_plano.iterrows()] if not df_plano.empty else [""]
-
-                with st.form(f"form_editar_{parc_id}"):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        numero = st.text_input("Número", value=parcelamento.get('numero_parcelamento', ''))
-                        cnpj = st.text_input("CNPJ", value=parcelamento.get('cnpj', '') or '')
-                        orgao = st.selectbox("Órgão", ["Receita Federal", "PGFN", "Procuradoria"],
-                            index=["Receita Federal", "PGFN", "Procuradoria"].index(parcelamento.get('orgao', 'Receita Federal')) if parcelamento.get('orgao') in ["Receita Federal", "PGFN", "Procuradoria"] else 0)
-                        modalidade = st.text_input("Modalidade", value=parcelamento.get('modalidade', '') or '')
-
-                    with col2:
-                        situacao = st.selectbox("Situação", ["Ativo", "Consolidado", "Rescindido", "Quitado"],
-                            index=["Ativo", "Consolidado", "Rescindido", "Quitado"].index(parcelamento.get('situacao', 'Ativo')) if parcelamento.get('situacao') in ["Ativo", "Consolidado", "Rescindido", "Quitado"] else 0)
-                        qtd_parcelas = st.number_input("Qtd. Parcelas", min_value=1, value=int(parcelamento.get('qtd_parcelas', 60) or 60))
-                        valor_parcela = st.number_input("Valor Parcela", min_value=0.0, value=float(parcelamento.get('valor_parcela', 0) or 0), format="%.2f")
-
-                    st.markdown("##### Valores")
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        valor_principal = st.number_input("Principal", min_value=0.0, value=float(parcelamento.get('valor_principal', 0) or 0), format="%.2f")
-                    with col2:
-                        valor_multa = st.number_input("Multa", min_value=0.0, value=float(parcelamento.get('valor_multa', 0) or 0), format="%.2f")
-                    with col3:
-                        valor_juros = st.number_input("Juros", min_value=0.0, value=float(parcelamento.get('valor_juros', 0) or 0), format="%.2f")
-
-                    st.markdown("##### Contas Contábeis")
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        conta_principal = st.selectbox("Conta Principal", opcoes_contas, key=f"cp_{parc_id}")
-                        conta_multa = st.selectbox("Conta Multa", opcoes_contas, key=f"cm_{parc_id}")
-                    with col2:
-                        conta_juros = st.selectbox("Conta Juros", opcoes_contas, key=f"cj_{parc_id}")
-                        conta_banco = st.selectbox("Conta Banco", opcoes_contas, key=f"cb_{parc_id}")
-
-                    observacoes = st.text_area("Observações", value=parcelamento.get('observacoes', '') or '')
-
-                    submitted = st.form_submit_button("💾 Salvar Alterações", use_container_width=True)
-
-                    if submitted:
-                        def extrair_codigo(sel):
-                            return sel.split(" - ")[0] if sel and " - " in sel else None
-
-                        dados = {
-                            'numero_parcelamento': numero,
-                            'cnpj': cnpj,
-                            'orgao': orgao,
-                            'modalidade': modalidade,
-                            'situacao': situacao,
-                            'qtd_parcelas': qtd_parcelas,
-                            'valor_parcela': valor_parcela,
-                            'valor_principal': valor_principal,
-                            'valor_multa': valor_multa,
-                            'valor_juros': valor_juros,
-                            'valor_total_consolidado': valor_principal + valor_multa + valor_juros,
-                            'saldo_devedor': valor_principal + valor_multa + valor_juros,
-                            'conta_contabil_principal': extrair_codigo(conta_principal),
-                            'conta_contabil_multa': extrair_codigo(conta_multa),
-                            'conta_contabil_juros': extrair_codigo(conta_juros),
-                            'conta_contabil_banco': extrair_codigo(conta_banco),
-                            'observacoes': observacoes
-                        }
-                        if atualizar_parcelamento(parc_id, dados):
-                            st.success("Parcelamento atualizado!")
-                            st.rerun()
-                        else:
-                            st.error("Erro ao atualizar!")
-        else:
-            st.info("Selecione um parcelamento acima para editar.")
-
-    # === TAB NOVO ===
-    with tab_novo:
+    # === NOVO ===
+    elif acao == "➕ Novo Parcelamento":
         exibir_formulario_novo_parcelamento_simples()
 
 
