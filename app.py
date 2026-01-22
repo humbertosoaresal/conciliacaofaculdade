@@ -4344,250 +4344,150 @@ def submenu_parcelamentos_cadastro():
     st.subheader("8.1 Cadastro de Parcelamentos")
     st.markdown("Gerencie os parcelamentos tributários da empresa (Receita Federal, PGFN, Procuradoria).")
 
-    # Nota: A verificação de parcelamento_selecionado e parcelamento_editar
-    # é feita no menu 8 principal para evitar interferência do selectbox
-
     # Carregar parcelamentos existentes
     df_parcelamentos = carregar_parcelamentos()
 
-    # Tabs para organizar
-    tab_lista, tab_novo = st.tabs(["📋 Lista de Parcelamentos", "➕ Novo Parcelamento"])
+    if df_parcelamentos.empty:
+        st.info("Nenhum parcelamento cadastrado.")
+        exibir_formulario_novo_parcelamento_simples()
+        return
 
-    with tab_lista:
-        if df_parcelamentos.empty:
-            st.info("Nenhum parcelamento cadastrado. Use a aba 'Novo Parcelamento' ou importe um PDF do e-CAC.")
-        else:
-            # Filtros
-            st.markdown("##### Filtros")
-            col_filtro1, col_filtro2, col_filtro3 = st.columns(3)
-            with col_filtro1:
-                situacoes_disponiveis = df_parcelamentos['situacao'].dropna().unique().tolist() if 'situacao' in df_parcelamentos.columns else []
-                filtro_situacao = st.multiselect(
-                    "Situação",
-                    options=["Todos"] + situacoes_disponiveis,
-                    default=["Todos"]
-                )
-            with col_filtro2:
-                orgaos_disponiveis = df_parcelamentos['orgao'].dropna().unique().tolist() if 'orgao' in df_parcelamentos.columns else []
-                filtro_orgao = st.multiselect(
-                    "Órgão",
-                    options=["Todos"] + orgaos_disponiveis,
-                    default=["Todos"]
-                )
-            with col_filtro3:
-                mostrar_encerrados = st.checkbox("Mostrar apenas encerrados", value=False)
+    # Criar lista de opções para selectbox
+    opcoes_parcelamentos = ["-- Selecione um parcelamento --"] + [
+        f"{row['id']} | {row['numero_parcelamento']} - {row.get('orgao', 'N/A')} | {row.get('situacao', 'N/A')}"
+        for _, row in df_parcelamentos.iterrows()
+    ]
 
-            # Aplica filtros
-            df_filtrado = df_parcelamentos.copy()
-            if "Todos" not in filtro_situacao and filtro_situacao:
-                df_filtrado = df_filtrado[df_filtrado['situacao'].isin(filtro_situacao)]
-            if "Todos" not in filtro_orgao and filtro_orgao:
-                df_filtrado = df_filtrado[df_filtrado['orgao'].isin(filtro_orgao)]
-            if mostrar_encerrados:
-                df_filtrado = df_filtrado[df_filtrado['situacao'].isin(['Rescindido', 'Quitado'])]
+    # Selectbox para escolher parcelamento
+    parcelamento_escolhido = st.selectbox(
+        "Selecione o Parcelamento:",
+        opcoes_parcelamentos,
+        key="selectbox_parcelamento_lista"
+    )
 
-            st.markdown("---")
+    col_acoes = st.columns(4)
+    with col_acoes[0]:
+        btn_ver = st.button("🔍 Ver Detalhes", disabled=(parcelamento_escolhido == "-- Selecione um parcelamento --"))
+    with col_acoes[1]:
+        btn_editar = st.button("✏️ Editar", disabled=(parcelamento_escolhido == "-- Selecione um parcelamento --"))
+    with col_acoes[2]:
+        btn_novo = st.button("➕ Novo Parcelamento")
+    with col_acoes[3]:
+        btn_excluir = st.button("🗑️ Excluir", disabled=(parcelamento_escolhido == "-- Selecione um parcelamento --"))
 
-            # Exibir resumo
-            col1, col2, col3, col4, col5 = st.columns(5)
-            with col1:
-                st.metric("Total", len(df_filtrado))
-            with col2:
-                total_saldo = df_filtrado['saldo_devedor'].sum() if 'saldo_devedor' in df_filtrado.columns else 0
-                st.metric("Saldo Devedor", formatar_moeda(total_saldo))
-            with col3:
-                ativos = len(df_filtrado[df_filtrado['situacao'] == 'Ativo']) if 'situacao' in df_filtrado.columns else 0
-                st.metric("Ativos", ativos)
-            with col4:
-                rescindidos = len(df_filtrado[df_filtrado['situacao'] == 'Rescindido']) if 'situacao' in df_filtrado.columns else 0
-                st.metric("Rescindidos", rescindidos)
-            with col5:
-                quitados = len(df_filtrado[df_filtrado['situacao'] == 'Quitado']) if 'situacao' in df_filtrado.columns else 0
-                st.metric("Quitados", quitados)
+    # Processar ações
+    if btn_novo:
+        st.session_state['mostrar_form_novo_parcelamento'] = True
+        st.rerun()
 
-            st.markdown("---")
+    if st.session_state.get('mostrar_form_novo_parcelamento'):
+        exibir_formulario_novo_parcelamento_simples()
+        return
 
-            # Tabela de parcelamentos
-            for _, row in df_filtrado.iterrows():
-                # Define ícone baseado no status
-                if row.get('situacao') == 'Ativo':
-                    icone = "🟢"
-                elif row.get('situacao') == 'Rescindido':
-                    icone = "🔴"
-                elif row.get('situacao') == 'Quitado':
-                    icone = "✅"
+    if parcelamento_escolhido != "-- Selecione um parcelamento --":
+        parcelamento_id = int(parcelamento_escolhido.split(" | ")[0])
+
+        if btn_ver:
+            st.session_state['parcelamento_selecionado'] = parcelamento_id
+            st.rerun()
+
+        if btn_editar:
+            st.session_state['parcelamento_editar'] = parcelamento_id
+            st.rerun()
+
+        if btn_excluir:
+            if excluir_parcelamento(parcelamento_id):
+                st.success("Parcelamento excluído!")
+                st.rerun()
+
+    st.markdown("---")
+
+    # Resumo
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total", len(df_parcelamentos))
+    with col2:
+        total_saldo = df_parcelamentos['saldo_devedor'].sum() if 'saldo_devedor' in df_parcelamentos.columns else 0
+        st.metric("Saldo Devedor", formatar_moeda(total_saldo))
+    with col3:
+        ativos = len(df_parcelamentos[df_parcelamentos['situacao'] == 'Ativo']) if 'situacao' in df_parcelamentos.columns else 0
+        st.metric("Ativos", ativos)
+    with col4:
+        rescindidos = len(df_parcelamentos[df_parcelamentos['situacao'] == 'Rescindido']) if 'situacao' in df_parcelamentos.columns else 0
+        st.metric("Rescindidos", rescindidos)
+
+    # Tabela simplificada
+    st.markdown("### Lista de Parcelamentos")
+    df_display = df_parcelamentos[['numero_parcelamento', 'orgao', 'situacao', 'saldo_devedor', 'qtd_parcelas']].copy()
+    df_display.columns = ['Número', 'Órgão', 'Situação', 'Saldo Devedor', 'Parcelas']
+    df_display['Saldo Devedor'] = df_display['Saldo Devedor'].apply(lambda x: formatar_moeda(x) if pd.notna(x) else 'R$ 0,00')
+    st.dataframe(df_display, use_container_width=True, hide_index=True)
+
+
+def exibir_formulario_novo_parcelamento_simples():
+    """Formulário simplificado para novo parcelamento."""
+    st.markdown("### ➕ Novo Parcelamento")
+
+    if st.button("⬅️ Voltar"):
+        if 'mostrar_form_novo_parcelamento' in st.session_state:
+            del st.session_state['mostrar_form_novo_parcelamento']
+        st.rerun()
+
+    df_plano = carregar_plano_contas()
+    opcoes_contas = [""] + [f"{row['codigo']} - {row['descricao']}" for _, row in df_plano.iterrows()] if not df_plano.empty else [""]
+
+    with st.form("form_novo_parcelamento_simples"):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            numero = st.text_input("Número do Parcelamento *")
+            cnpj = st.text_input("CNPJ")
+            orgao = st.selectbox("Órgão", ["Receita Federal", "PGFN", "Procuradoria"])
+            modalidade = st.text_input("Modalidade")
+
+        with col2:
+            situacao = st.selectbox("Situação", ["Ativo", "Consolidado", "Rescindido", "Quitado"])
+            qtd_parcelas = st.number_input("Quantidade de Parcelas", min_value=1, value=60)
+            valor_parcela = st.number_input("Valor da Parcela (R$)", min_value=0.0, format="%.2f")
+            data_inicio = st.date_input("Data Início *", value=None)
+
+        st.markdown("##### Valores")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            valor_principal = st.number_input("Principal (R$)", min_value=0.0, format="%.2f")
+        with col2:
+            valor_multa = st.number_input("Multa (R$)", min_value=0.0, format="%.2f")
+        with col3:
+            valor_juros = st.number_input("Juros (R$)", min_value=0.0, format="%.2f")
+
+        submitted = st.form_submit_button("💾 Salvar", use_container_width=True)
+
+        if submitted:
+            if not numero or not data_inicio:
+                st.error("Número e Data Início são obrigatórios!")
+            else:
+                dados = {
+                    'numero_parcelamento': numero,
+                    'cnpj': cnpj,
+                    'orgao': orgao,
+                    'modalidade': modalidade,
+                    'situacao': situacao,
+                    'data_inicio': data_inicio.strftime('%Y-%m-%d'),
+                    'qtd_parcelas': qtd_parcelas,
+                    'valor_parcela': valor_parcela,
+                    'valor_total_consolidado': valor_principal + valor_multa + valor_juros,
+                    'valor_principal': valor_principal,
+                    'valor_multa': valor_multa,
+                    'valor_juros': valor_juros,
+                    'saldo_devedor': valor_principal + valor_multa + valor_juros,
+                }
+                if salvar_parcelamento(dados):
+                    st.success("Parcelamento salvo!")
+                    if 'mostrar_form_novo_parcelamento' in st.session_state:
+                        del st.session_state['mostrar_form_novo_parcelamento']
+                    st.rerun()
                 else:
-                    icone = "🟡"
-
-                with st.expander(f"{icone} {row['numero_parcelamento']} - {row.get('orgao', 'N/A')} | {row.get('situacao', 'N/A')} | Saldo: {formatar_moeda(row.get('saldo_devedor', 0))}"):
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.write(f"**Número:** {row['numero_parcelamento']}")
-                        st.write(f"**CNPJ:** {row.get('cnpj', 'N/A')}")
-                        st.write(f"**Órgão:** {row.get('orgao', 'N/A')}")
-                        st.write(f"**Modalidade:** {row.get('modalidade', 'N/A')}")
-                        st.write(f"**Situação:** {row.get('situacao', 'N/A')}")
-                    with col2:
-                        st.write(f"**Data Início:** {row.get('data_inicio', 'N/A')}")
-                        st.write(f"**Data Adesão:** {row.get('data_adesao', 'N/A')}")
-                        st.write(f"**Data Consolidação:** {row.get('data_consolidacao', 'N/A')}")
-                        if row.get('data_encerramento'):
-                            st.write(f"**Data Encerramento:** {row.get('data_encerramento')}")
-                            if row.get('motivo_encerramento'):
-                                st.write(f"**Motivo:** {row.get('motivo_encerramento')}")
-                        st.write(f"**Qtd. Parcelas:** {row.get('qtd_parcelas', 0)}")
-                        st.write(f"**Valor Parcela:** {formatar_moeda(row.get('valor_parcela', 0))}")
-                    with col3:
-                        st.write(f"**Principal:** {formatar_moeda(row.get('valor_principal', 0))}")
-                        st.write(f"**Multa:** {formatar_moeda(row.get('valor_multa', 0))}")
-                        st.write(f"**Juros:** {formatar_moeda(row.get('valor_juros', 0))}")
-                        st.write(f"**Total Consolidado:** {formatar_moeda(row.get('valor_total_consolidado', 0))}")
-                        st.write(f"**Saldo Devedor:** {formatar_moeda(row.get('saldo_devedor', 0))}")
-
-                    # Progresso
-                    pagas = row.get('qtd_pagas', 0) or 0
-                    total = row.get('qtd_parcelas', 1) or 1
-                    progresso = pagas / total
-                    st.progress(progresso, text=f"Progresso: {pagas}/{total} parcelas pagas ({progresso*100:.1f}%)")
-
-                    # Funções callback para os botões
-                    def selecionar_parcelamento(pid):
-                        st.session_state['parcelamento_selecionado'] = pid
-
-                    def editar_parcelamento(pid):
-                        st.session_state['parcelamento_editar'] = pid
-
-                    # Botões de ação
-                    col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
-                    with col_btn1:
-                        st.button(
-                            "🔍 Ver Detalhes",
-                            key=f"ver_{row['id']}",
-                            on_click=selecionar_parcelamento,
-                            args=(row['id'],)
-                        )
-                    with col_btn2:
-                        st.button(
-                            "✏️ Editar",
-                            key=f"edit_{row['id']}",
-                            on_click=editar_parcelamento,
-                            args=(row['id'],)
-                        )
-                    with col_btn3:
-                        # Botão para rescindir/encerrar
-                        if row.get('situacao') == 'Ativo':
-                            if st.button("🔴 Rescindir", key=f"rescindir_{row['id']}"):
-                                atualizar_parcelamento(row['id'], {
-                                    'situacao': 'Rescindido',
-                                    'data_encerramento': datetime.now().strftime('%Y-%m-%d')
-                                })
-                                st.success("Parcelamento marcado como Rescindido!")
-                                st.rerun()
-                    with col_btn4:
-                        if st.button("🗑️ Excluir", key=f"del_{row['id']}"):
-                            if excluir_parcelamento(row['id']):
-                                st.success("Parcelamento excluído!")
-                                st.rerun()
-
-    with tab_novo:
-        st.markdown("### Cadastrar Novo Parcelamento")
-
-        # Carrega plano de contas para seleção
-        df_plano = carregar_plano_contas()
-        opcoes_contas = [""] + [f"{row['codigo']} - {row['descricao']}" for _, row in df_plano.iterrows()] if not df_plano.empty else [""]
-
-        with st.form("form_novo_parcelamento"):
-            st.markdown("##### Dados Básicos")
-            col1, col2 = st.columns(2)
-
-            with col1:
-                numero = st.text_input("Número do Parcelamento *", placeholder="Ex: 123456789")
-                cnpj = st.text_input("CNPJ", placeholder="00.000.000/0000-00")
-                orgao = st.selectbox("Órgão", ["Receita Federal", "PGFN", "Procuradoria"])
-                modalidade = st.text_input("Modalidade", placeholder="Ex: PERT, REFIS, Ordinário")
-
-            with col2:
-                situacao = st.selectbox("Situação", ["Ativo", "Consolidado", "Rescindido", "Quitado", "Em Análise"])
-                qtd_parcelas = st.number_input("Quantidade de Parcelas", min_value=1, value=60)
-                valor_parcela = st.number_input("Valor da Parcela (R$)", min_value=0.0, format="%.2f")
-
-            st.markdown("##### Datas do Parcelamento")
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                data_inicio = st.date_input("Data Início *", value=None, help="Data de início do parcelamento")
-            with col2:
-                data_adesao = st.date_input("Data de Adesão", value=None)
-            with col3:
-                data_consolidacao = st.date_input("Data de Consolidação", value=None)
-            with col4:
-                data_encerramento = st.date_input("Data Encerramento", value=None, help="Preencher apenas se Rescindido ou Quitado")
-
-            # Motivo do encerramento (aparece se data_encerramento preenchida)
-            motivo_encerramento = st.text_input("Motivo do Encerramento", placeholder="Ex: Rescisão por inadimplência, Quitação antecipada, etc.")
-
-            st.markdown("##### Valores Consolidados")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                valor_principal = st.number_input("Principal (R$)", min_value=0.0, format="%.2f")
-            with col2:
-                valor_multa = st.number_input("Multa (R$)", min_value=0.0, format="%.2f")
-            with col3:
-                valor_juros = st.number_input("Juros (R$)", min_value=0.0, format="%.2f")
-
-            st.markdown("##### Contas Contábeis")
-            col1, col2 = st.columns(2)
-            with col1:
-                conta_principal = st.selectbox("Conta - Tributos a Pagar (Principal)", opcoes_contas, key="conta_principal")
-                conta_multa = st.selectbox("Conta - Despesa Multas", opcoes_contas, key="conta_multa")
-            with col2:
-                conta_juros = st.selectbox("Conta - Despesa Juros", opcoes_contas, key="conta_juros")
-                conta_banco = st.selectbox("Conta - Banco", opcoes_contas, key="conta_banco")
-
-            observacoes = st.text_area("Observações", placeholder="Anotações adicionais sobre o parcelamento...")
-
-            submitted = st.form_submit_button("💾 Salvar Parcelamento", use_container_width=True)
-
-            if submitted:
-                if not numero:
-                    st.error("O número do parcelamento é obrigatório!")
-                elif not data_inicio:
-                    st.error("A data de início é obrigatória!")
-                else:
-                    # Extrai código da conta
-                    def extrair_codigo_conta(selecao):
-                        if selecao and " - " in selecao:
-                            return selecao.split(" - ")[0]
-                        return None
-
-                    dados = {
-                        'numero_parcelamento': numero,
-                        'cnpj': cnpj,
-                        'orgao': orgao,
-                        'modalidade': modalidade,
-                        'situacao': situacao,
-                        'data_inicio': data_inicio.strftime('%Y-%m-%d') if data_inicio else None,
-                        'data_adesao': data_adesao.strftime('%Y-%m-%d') if data_adesao else None,
-                        'data_consolidacao': data_consolidacao.strftime('%Y-%m-%d') if data_consolidacao else None,
-                        'data_encerramento': data_encerramento.strftime('%Y-%m-%d') if data_encerramento else None,
-                        'motivo_encerramento': motivo_encerramento if motivo_encerramento else None,
-                        'qtd_parcelas': qtd_parcelas,
-                        'valor_parcela': valor_parcela,
-                        'valor_total_consolidado': valor_principal + valor_multa + valor_juros,
-                        'valor_principal': valor_principal,
-                        'valor_multa': valor_multa,
-                        'valor_juros': valor_juros,
-                        'saldo_devedor': valor_principal + valor_multa + valor_juros,
-                        'conta_contabil_principal': extrair_codigo_conta(conta_principal),
-                        'conta_contabil_multa': extrair_codigo_conta(conta_multa),
-                        'conta_contabil_juros': extrair_codigo_conta(conta_juros),
-                        'conta_contabil_banco': extrair_codigo_conta(conta_banco),
-                        'observacoes': observacoes
-                    }
-
-                    parcelamento_id = salvar_parcelamento(dados)
-                    if parcelamento_id:
-                        st.success(f"Parcelamento {numero} cadastrado com sucesso!")
-                        st.rerun()
+                    st.error("Erro ao salvar!")
 
 
 def submenu_parcelamentos_importar_pdf():
