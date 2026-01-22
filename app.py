@@ -705,17 +705,87 @@ def submenu_plano_contas():
                         st.info("Todas as contas do arquivo ja existem no sistema.")
 
     st.markdown("---")
-    st.subheader("Plano de Contas Atuais")
-    df_editor = carregar_plano_contas().copy()
-    edited_df = st.data_editor(df_editor, num_rows="dynamic", width='stretch', key='editor_plano_contas')
-    if st.button("💾 Salvar Alterações do Plano de Contas"):
-        df_to_save = pd.DataFrame(edited_df).dropna(subset=['codigo'])
-        if df_to_save['codigo'].duplicated().any():
-            st.error("Erro: Existem códigos duplicados.")
-        else:
-            salvar_plano_contas(df_to_save)
-            st.success("Plano de contas salvo com sucesso!")
-            st.rerun()
+
+    # Abas para gerenciamento do plano de contas
+    tab_visualizar, tab_nova_conta, tab_atualizar_data = st.tabs([
+        "📋 Visualizar/Editar", "➕ Nova Conta", "📅 Atualizar Data Cadastro"
+    ])
+
+    with tab_visualizar:
+        st.subheader("Plano de Contas Atuais")
+        df_editor = carregar_plano_contas().copy()
+        edited_df = st.data_editor(df_editor, num_rows="dynamic", use_container_width=True, key='editor_plano_contas')
+        if st.button("💾 Salvar Alterações do Plano de Contas"):
+            df_to_save = pd.DataFrame(edited_df).dropna(subset=['codigo'])
+            if df_to_save['codigo'].duplicated().any():
+                st.error("Erro: Existem códigos duplicados.")
+            else:
+                salvar_plano_contas(df_to_save)
+                st.success("Plano de contas salvo com sucesso!")
+                st.rerun()
+
+    with tab_nova_conta:
+        st.subheader("Cadastrar Nova Conta")
+        from db_manager import inserir_conta_plano
+        col1, col2 = st.columns(2)
+        with col1:
+            novo_codigo = st.text_input("Código (Reduzido)", key='novo_codigo')
+            nova_classificacao = st.text_input("Classificação", key='nova_classificacao', placeholder="Ex: 1.1.01.001")
+            nova_descricao = st.text_input("Descrição", key='nova_descricao')
+        with col2:
+            novo_tipo = st.selectbox("Tipo", options=['A', 'S'], index=0, key='novo_tipo',
+                                    help="A = Analítica, S = Sintética")
+            nova_natureza = st.selectbox("Natureza", options=['Devedora', 'Credora', 'Outra'], key='nova_natureza')
+            novo_grau = st.text_input("Grau", key='novo_grau', value='1')
+        nova_data_cadastro = st.text_input("Data de Cadastro (DD/MM/AAAA)", datetime.date.today().strftime('%d/%m/%Y'), key='nova_data_cadastro')
+
+        if st.button("➕ Cadastrar Conta", key='btn_cadastrar_conta'):
+            if novo_codigo and nova_classificacao and nova_descricao:
+                dados = {
+                    'codigo': novo_codigo,
+                    'classificacao': nova_classificacao,
+                    'descricao': nova_descricao,
+                    'tipo': novo_tipo,
+                    'natureza': nova_natureza,
+                    'grau': novo_grau,
+                    'data_cadastro': nova_data_cadastro,
+                    'encerrada': False,
+                    'data_encerramento': None
+                }
+                if inserir_conta_plano(dados):
+                    st.success(f"Conta {novo_codigo} - {nova_descricao} cadastrada com sucesso!")
+                    st.rerun()
+            else:
+                st.error("Preencha pelo menos Código, Classificação e Descrição.")
+
+    with tab_atualizar_data:
+        st.subheader("Atualizar Data de Cadastro em Lote")
+        st.info("Use esta opção para corrigir a data de cadastro de todas as contas importadas com uma data específica.")
+        from db_manager import atualizar_data_cadastro_lote
+
+        # Mostra as datas de cadastro existentes
+        df_contas = carregar_plano_contas()
+        if not df_contas.empty:
+            datas_unicas = df_contas['data_cadastro'].unique().tolist()
+            st.write(f"**Datas de cadastro existentes:** {', '.join([str(d) for d in datas_unicas if d])}")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            data_antiga = st.text_input("Data Antiga (a ser substituída)", key='data_antiga', placeholder="DD/MM/AAAA")
+        with col2:
+            data_nova = st.text_input("Nova Data", key='data_nova', placeholder="DD/MM/AAAA")
+
+        if st.button("🔄 Atualizar Datas", key='btn_atualizar_data'):
+            if data_antiga and data_nova:
+                qtd = atualizar_data_cadastro_lote(data_antiga, data_nova)
+                if qtd > 0:
+                    st.success(f"{qtd} contas atualizadas de {data_antiga} para {data_nova}!")
+                    st.rerun()
+                else:
+                    st.warning(f"Nenhuma conta encontrada com a data {data_antiga}")
+            else:
+                st.error("Preencha ambas as datas.")
+
 
 def submenu_extrato_importacao(df_bancos):
     st.subheader("2.1 Upload Extrato Bancário")

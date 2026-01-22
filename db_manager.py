@@ -599,6 +599,86 @@ def excluir_conta_plano(codigo: str) -> bool:
             st.error(f"Erro ao excluir conta do plano de contas: {e}")
             return False
 
+
+def atualizar_data_cadastro_lote(data_antiga: str, data_nova: str) -> int:
+    """Atualiza a data de cadastro de todas as contas com a data antiga para a nova data."""
+    with get_db_connection() as conn:
+        try:
+            c = conn.cursor()
+            c.execute(f"UPDATE {PLANO_CONTAS_TABLE} SET data_cadastro = ? WHERE data_cadastro = ?",
+                     (data_nova, data_antiga))
+            conn.commit()
+            qtd = c.rowcount
+            if qtd > 0:
+                carregar_plano_contas.clear()
+            return qtd
+        except Exception as e:
+            st.error(f"Erro ao atualizar data de cadastro: {e}")
+            return 0
+
+
+def atualizar_conta_plano(codigo: str, dados: dict) -> bool:
+    """Atualiza os dados de uma conta do plano de contas."""
+    with get_db_connection() as conn:
+        try:
+            c = conn.cursor()
+            campos = []
+            valores = []
+            for campo, valor in dados.items():
+                if campo != 'codigo':  # Nao permite alterar o codigo
+                    campos.append(f"{campo} = ?")
+                    valores.append(valor)
+            valores.append(codigo)
+
+            if campos:
+                query = f"UPDATE {PLANO_CONTAS_TABLE} SET {', '.join(campos)} WHERE codigo = ?"
+                c.execute(query, valores)
+                conn.commit()
+                if c.rowcount > 0:
+                    carregar_plano_contas.clear()
+                    return True
+            return False
+        except Exception as e:
+            st.error(f"Erro ao atualizar conta: {e}")
+            return False
+
+
+def inserir_conta_plano(dados: dict) -> bool:
+    """Insere uma nova conta no plano de contas."""
+    with get_db_connection() as conn:
+        try:
+            c = conn.cursor()
+            campos = list(dados.keys())
+            valores = list(dados.values())
+            placeholders = ', '.join(['?' for _ in campos])
+
+            query = f"INSERT INTO {PLANO_CONTAS_TABLE} ({', '.join(campos)}) VALUES ({placeholders})"
+            c.execute(query, valores)
+            conn.commit()
+            carregar_plano_contas.clear()
+            return True
+        except Exception as e:
+            st.error(f"Erro ao inserir conta: {e}")
+            return False
+
+
+def buscar_conta_plano(codigo: str) -> dict:
+    """Busca uma conta do plano de contas pelo código."""
+    with get_db_connection() as conn:
+        try:
+            c = conn.cursor()
+            c.execute(f"SELECT * FROM {PLANO_CONTAS_TABLE} WHERE codigo = ?", (codigo,))
+            row = c.fetchone()
+            if row:
+                colunas = ['codigo', 'classificacao', 'descricao', 'tipo', 'natureza', 'grau',
+                          'data_cadastro', 'encerrada', 'data_encerramento']
+                return dict(zip(colunas, row))
+            return None
+        except Exception as e:
+            st.error(f"Erro ao buscar conta: {e}")
+            return None
+
+
 # ==============================================================================
 # FUNÇÕES DE LANÇAMENTOS CONTÁBEIS
 # ==============================================================================
