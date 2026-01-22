@@ -3246,12 +3246,30 @@ def main():
 
     elif menu_option == "3. Extrato Lançamento":
         st.subheader("3. Upload Extrato Lançamento Contábil")
+
+        st.info("""
+        **Formato esperado do arquivo:**
+        - Colunas: Data, Valor, Historico (ou Descricao), ReduzDeb, NomeContaD, ReduzCred, NomeContaC
+        - Formatos aceitos: Excel (.xlsx, .xls) ou CSV (separador ;)
+        """)
+
         uploaded_file = st.file_uploader("Selecione o arquivo Contábil", type=['xlsx', 'xls', 'csv'])
-        substituir_dados = st.checkbox("Substituir lançamentos existentes", value=True)
+        substituir_dados = st.checkbox("Substituir lançamentos existentes", value=False)
+
         if uploaded_file:
+            df_contabil = ler_extrato_contabil(uploaded_file)
+
+            # Verificar se leitura funcionou
+            if df_contabil.empty:
+                st.error("Nenhum dado foi lido do arquivo. Verifique o formato e as colunas.")
+                st.stop()
+
+            st.success(f"Arquivo lido com sucesso: {len(df_contabil)} lançamentos encontrados")
+            st.write(f"**Colunas detectadas:** {list(df_contabil.columns)}")
+
+            # Só limpa se checkbox marcado E arquivo foi lido com sucesso
             if substituir_dados:
                 limpar_lancamentos_contabeis()
-            df_contabil = ler_extrato_contabil(uploaded_file)
 
             # Adicionar colunas de origem
             df_contabil['Origem'] = 'Sistema Origem'
