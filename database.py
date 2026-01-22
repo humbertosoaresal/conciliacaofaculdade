@@ -25,6 +25,24 @@ else:
 # Nome do arquivo SQLite para desenvolvimento local
 SQLITE_FILE = 'conciliacao_db.sqlite'
 
+# Engine SQLAlchemy (para pandas.to_sql)
+_sqlalchemy_engine = None
+
+
+def get_sqlalchemy_engine():
+    """Retorna uma engine SQLAlchemy para uso com pandas.to_sql()."""
+    global _sqlalchemy_engine
+    if _sqlalchemy_engine is None:
+        from sqlalchemy import create_engine
+        if IS_PRODUCTION:
+            url = DATABASE_URL
+            if url.startswith('postgres://'):
+                url = url.replace('postgres://', 'postgresql://', 1)
+            _sqlalchemy_engine = create_engine(url)
+        else:
+            _sqlalchemy_engine = create_engine(f'sqlite:///{SQLITE_FILE}')
+    return _sqlalchemy_engine
+
 
 def get_placeholder():
     """Retorna o placeholder correto para o banco atual."""

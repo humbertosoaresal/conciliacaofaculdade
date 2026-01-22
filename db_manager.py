@@ -9,7 +9,8 @@ from contextlib import contextmanager
 # Importa módulo de conexão com banco (SQLite local ou PostgreSQL produção)
 from database import (
     get_db_connection, IS_PRODUCTION, get_placeholder,
-    execute_query, adapt_schema_for_postgres, get_connection
+    execute_query, adapt_schema_for_postgres, get_connection,
+    get_sqlalchemy_engine
 )
 
 # O nome do arquivo do banco de dados SQLite (usado apenas localmente)
@@ -417,16 +418,18 @@ def carregar_cadastro_contas() -> pd.DataFrame:
 def salvar_cadastro_contas(df: pd.DataFrame):
     """Salva o DataFrame de cadastro no BD, usando uma estratégia de DELETE + APPEND."""
     db_cols = ['Agencia', 'Conta', 'Conta_OFX_Normalizada', 'Conta_Contabil', 'Conta_Contabil_Negativo', 'Saldo_Inicial', 'Data_Inicial_Saldo', 'Codigo_Banco', 'Path_Logo']
-    
+
+    # Usa SQLAlchemy engine para to_sql
+    engine = get_sqlalchemy_engine()
+
     with get_db_connection() as conn:
         c = conn.cursor()
         # Limpa a tabela antes de inserir novos dados
         c.execute(f"DELETE FROM {CADASTRO_CONTAS_TABLE}")
+        conn.commit()
 
         if df.empty:
-            st.warning(f"Tabela '{CADASTRO_CONTAS_TABLE}' foi limpa, pois o DataFrame fornecido está vazio.")
-            conn.commit()
-            # carregar_cadastro_contas.clear()  # Desabilitado - cache desligado
+            st.warning(f"Tabela '{CADASTRO_CONTAS_TABLE}' foi limpa, pois o DataFrame fornecido esta vazio.")
             return
 
         if 'Conta_OFX_Normalizada' in df.columns:
@@ -445,14 +448,12 @@ def salvar_cadastro_contas(df: pd.DataFrame):
 
             df_final = df_final[db_cols]
             df_final.drop_duplicates(subset=['Codigo_Banco', 'Conta_OFX_Normalizada'], keep='last', inplace=True)
-            
-            # Anexa o dataframe limpo e processado
-            df_final.to_sql(CADASTRO_CONTAS_TABLE, conn, if_exists='append', index=False)
-            conn.commit()
+
+            # Anexa o dataframe limpo e processado (usa SQLAlchemy engine)
+            df_final.to_sql(CADASTRO_CONTAS_TABLE, engine, if_exists='append', index=False)
             st.success("Cadastro salvo no banco de dados.")
-            # carregar_cadastro_contas.clear()  # Desabilitado - cache desligado
         else:
-            st.error("Erro: DataFrame de cadastro não possui a coluna 'Conta_OFX_Normalizada'.")
+            st.error("Erro: DataFrame de cadastro nao possui a coluna 'Conta_OFX_Normalizada'.")
 
 def salvar_contas_ofx_faltantes(df_ofx: pd.DataFrame, df_cadastro_atual: pd.DataFrame, df_bancos: pd.DataFrame):
     """
@@ -506,17 +507,16 @@ def salvar_contas_ofx_faltantes(df_ofx: pd.DataFrame, df_cadastro_atual: pd.Data
 
         df_final = contas_novas[['Agencia', 'Conta', 'Conta_OFX_Normalizada', 'Conta_Contabil', 'Conta_Contabil_Negativo', 'Saldo_Inicial', 'Data_Inicial_Saldo', 'Codigo_Banco', 'Path_Logo']]
 
-        with get_db_connection() as conn:
-            try:
-                df_final.to_sql(CADASTRO_CONTAS_TABLE, conn, if_exists='append', index=False)
-                st.success(f"Adicionadas {len(df_final)} novas contas ao cadastro.")
-                # carregar_cadastro_contas.clear()  # Desabilitado - cache desligado
-            except Exception as e:
-                error_str = str(e).lower()
-                if 'integrity' in error_str or 'duplicate' in error_str or 'unique' in error_str:
-                    st.warning(f"Aviso de Integridade do Banco de Dados: Uma ou mais contas ja existiam e foram ignoradas. Detalhe: {e}")
-                else:
-                    st.error(f"Erro ao salvar novas contas no cadastro: {e}")
+        try:
+            engine = get_sqlalchemy_engine()
+            df_final.to_sql(CADASTRO_CONTAS_TABLE, engine, if_exists='append', index=False)
+            st.success(f"Adicionadas {len(df_final)} novas contas ao cadastro.")
+        except Exception as e:
+            error_str = str(e).lower()
+            if 'integrity' in error_str or 'duplicate' in error_str or 'unique' in error_str:
+                st.warning(f"Aviso de Integridade do Banco de Dados: Uma ou mais contas ja existiam e foram ignoradas. Detalhe: {e}")
+            else:
+                st.error(f"Erro ao salvar novas contas no cadastro: {e}")
 
 def excluir_conta_cadastro(conta_ofx_normalizada: str) -> bool:
     """Exclui uma conta específica do cadastro."""
@@ -549,9 +549,9 @@ def carregar_plano_contas() -> pd.DataFrame:
 
 def salvar_plano_contas(df: pd.DataFrame):
     """Salva o DataFrame do plano de contas no banco de dados."""
-    with get_db_connection() as conn:
-        df.to_sql(PLANO_CONTAS_TABLE, conn, if_exists='replace', index=False)
-        carregar_plano_contas.clear()
+    engine = get_sqlalchemy_engine()
+    df.to_sql(PLANO_CONTAS_TABLE, engine, if_exists='replace', index=False)
+    carregar_plano_contas.clear()
 
 def excluir_conta_plano(codigo: str) -> bool:
     """Exclui uma conta do plano de contas pelo código."""
@@ -572,31 +572,31 @@ def excluir_conta_plano(codigo: str) -> bool:
 # FUNÇÕES DE LANÇAMENTOS CONTÁBEIS
 # ==============================================================================
 def salvar_lancamentos_contabeis(df: pd.DataFrame):
-    """Salva o DataFrame de lançamentos contábeis no BD."""
-    with get_db_connection() as conn:
-        cols_map = {
-            'Data Lançamento': 'data_lancamento',
-            'Historico': 'historico',
-            'Valor': 'valor',
-            'Tipo Lancamento': 'tipo_lancamento',
-            'ReduzDeb': 'reduz_deb',
-            'NomeContaD': 'nome_conta_d',
-            'ReduzCred': 'reduz_cred',
-            'NomeContaC': 'nome_conta_c',
-            'Origem': 'origem',
-            'ID Lancamento': 'idlancamento'
-        }
-        
-        # Garante que as colunas existam no DF antes de tentar acessá-las
-        df_save = pd.DataFrame()
-        for df_col, db_col in cols_map.items():
-            if df_col in df.columns:
-                df_save[db_col] = df[df_col]
-            else:
-                df_save[db_col] = None # Adiciona a coluna com nulos se não existir
+    """Salva o DataFrame de lançamentos contabeis no BD."""
+    cols_map = {
+        'Data Lançamento': 'data_lancamento',
+        'Historico': 'historico',
+        'Valor': 'valor',
+        'Tipo Lancamento': 'tipo_lancamento',
+        'ReduzDeb': 'reduz_deb',
+        'NomeContaD': 'nome_conta_d',
+        'ReduzCred': 'reduz_cred',
+        'NomeContaC': 'nome_conta_c',
+        'Origem': 'origem',
+        'ID Lancamento': 'idlancamento'
+    }
 
-        df_save.to_sql(LANCAMENTOS_CONTABEIS_TABLE, conn, if_exists='append', index=False)
-        carregar_lancamentos_contabeis.clear()
+    # Garante que as colunas existam no DF antes de tentar acessa-las
+    df_save = pd.DataFrame()
+    for df_col, db_col in cols_map.items():
+        if df_col in df.columns:
+            df_save[db_col] = df[df_col]
+        else:
+            df_save[db_col] = None  # Adiciona a coluna com nulos se nao existir
+
+    engine = get_sqlalchemy_engine()
+    df_save.to_sql(LANCAMENTOS_CONTABEIS_TABLE, engine, if_exists='append', index=False)
+    carregar_lancamentos_contabeis.clear()
 
 def salvar_lancamentos_editados(df_editado: pd.DataFrame):
     """Atualiza os lançamentos contábeis no banco de dados a partir de um DataFrame editado."""
