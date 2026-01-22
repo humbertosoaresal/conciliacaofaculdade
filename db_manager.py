@@ -412,8 +412,7 @@ def init_db():
 # FUNÇÕES DE CADASTRO DE CONTAS BANCÁRIAS
 # ==============================================================================
 
-# CACHE DESABILITADO TEMPORARIAMENTE PARA DEBUGGING
-# @st.cache_data(show_spinner="Carregando cadastro do banco de dados...")
+@st.cache_data(show_spinner="Carregando cadastro de contas...", ttl=300)
 def carregar_cadastro_contas() -> pd.DataFrame:
     """Carrega o cadastro de contas do BD, incluindo as novas colunas de banco e logo."""
     try:
@@ -564,7 +563,7 @@ def excluir_conta_cadastro(conta_ofx_normalizada: str) -> bool:
 # FUNÇÕES DE PLANO DE CONTAS
 # ==============================================================================
 
-@st.cache_data(show_spinner="Carregando plano de contas...")
+@st.cache_data(show_spinner="Carregando plano de contas...", ttl=300)
 def carregar_plano_contas() -> pd.DataFrame:
     """Carrega o plano de contas do banco de dados."""
     try:
@@ -803,7 +802,7 @@ def salvar_partidas_lancamento(partidas):
     return True
 
 
-@st.cache_data(show_spinner="Carregando lançamentos contábeis...")
+@st.cache_data(show_spinner="Carregando lançamentos contábeis...", ttl=300)
 def carregar_lancamentos_contabeis() -> pd.DataFrame:
     """Carrega todos os lançamentos contábeis do banco de dados."""
     try:
@@ -914,7 +913,7 @@ def salvar_extrato_bancario_historico(df_ofx: pd.DataFrame):
             st.error(f"Erro ao inserir dados no historico do extrato: {e}")
             conn.rollback()
 
-@st.cache_data(show_spinner="Carregando historico do banco de dados...")
+@st.cache_data(show_spinner="Carregando historico do banco de dados...", ttl=300)
 def carregar_extrato_bancario_historico(conta_ofx_normalizada: str, data_inicio: datetime.date, data_fim: datetime.date) -> pd.DataFrame:
     """Carrega o extrato bancario do historico, filtrando por conta e periodo."""
     with get_db_connection() as conn:
@@ -960,7 +959,7 @@ def limpar_extrato_bancario_historico():
 # FUNÇÕES DE CADASTRO DA EMPRESA
 # ==============================================================================
 
-@st.cache_data(show_spinner="Carregando dados da empresa...")
+@st.cache_data(show_spinner="Carregando dados da empresa...", ttl=600)
 def carregar_empresa() -> dict:
     """Carrega os dados da empresa do banco de dados."""
     try:
@@ -1024,7 +1023,7 @@ def salvar_empresa(dados_empresa: dict) -> bool:
 # FUNÇÕES DE CADASTRO DE SÓCIOS
 # ==============================================================================
 
-@st.cache_data(show_spinner="Carregando sócios...")
+@st.cache_data(show_spinner="Carregando sócios...", ttl=600)
 def carregar_socios() -> pd.DataFrame:
     """Carrega todos os sócios da empresa do banco de dados."""
     try:
@@ -1108,7 +1107,7 @@ def excluir_socio(id_socio: int) -> bool:
 # FUNÇÕES DE GERENCIAMENTO DE LOGOTIPOS
 # ==============================================================================
 
-@st.cache_data(show_spinner="Carregando logotipos...")
+@st.cache_data(show_spinner="Carregando logotipos...", ttl=600)
 def carregar_logotipos() -> pd.DataFrame:
     """Carrega todos os logotipos da empresa do banco de dados."""
     try:
@@ -1207,7 +1206,7 @@ def obter_logo_principal() -> str:
 # FUNÇÕES DE PARCELAMENTOS
 # ==============================================================================
 
-@st.cache_data(show_spinner="Carregando parcelamentos...")
+@st.cache_data(show_spinner="Carregando parcelamentos...", ttl=300)
 def carregar_parcelamentos() -> pd.DataFrame:
     """Carrega todos os parcelamentos do banco de dados."""
     try:
